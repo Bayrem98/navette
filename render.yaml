@@ -11,7 +11,7 @@ services:
         value: 88bcabc4997f720becd5cb84b44c7b6e  # Mettez la valeur directement
       - key: DATABASE_URL
         fromDatabase:
-          name: navette-db2
+          name: navette_db2
           property: connectionString
       - key: RENDER
         value: true
@@ -21,7 +21,7 @@ services:
         value: transport_app.settings
 
 databases:
-  - name: navette-db2
-    databaseName: navette-db2
-    user: navette
+  - name: navette_db2
+    databaseName: navette_db2
+    user: navette_db2_user
     plan: free  # Spécifiez le plan
