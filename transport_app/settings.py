@@ -124,6 +124,13 @@ else:
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
+# Configuration spécifique pour l'interface mobile
+MOBILE_SESSION_COOKIE_NAME = 'mobile_sessionid'  # Nom du cookie pour l'interface mobile
+MOBILE_SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 jours (optionnel)
+MOBILE_SESSION_COOKIE_SECURE = not DEBUG  # HTTPS en production
+MOBILE_SESSION_COOKIE_HTTPONLY = True
+MOBILE_SESSION_COOKIE_SAMESITE = 'Lax'
+
 # Configuration CSRF
 CSRF_COOKIE_HTTPONLY = False  # Doit être False pour l'accès JavaScript
 CSRF_USE_SESSIONS = True
