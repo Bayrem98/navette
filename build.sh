@@ -22,11 +22,11 @@ sleep 10
 
 # Run migrations avec le bon settings
 echo "Running migrations..."
-python manage.py migrate --noinput --settings=transport_app.settings_production
+python manage.py migrate --noinput --settings=transport_app.settings
 
 # Collect static files avec le bon settings
 echo "Collecting static files..."
-python manage.py collectstatic --no-input --clear --settings=transport_app.settings_production
+python manage.py collectstatic --no-input --clear --settings=transport_app.settings
 
 # List collected static files to verify
 echo "Static files collected:"

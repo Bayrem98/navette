@@ -18,7 +18,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DJANGO_SETTINGS_MODULE  # AJOUTEZ CETTE LIGNE
-        value: transport_app.settings_production
+        value: transport_app.settings
 
 databases:
   - name: navette-db2
