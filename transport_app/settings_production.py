@@ -61,7 +61,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'transport_app.wsgi.application'
 
-# PostgreSQL for production
+# PostgreSQL for production - CORRECTION IMPORTANTE
 DATABASES = {
     'default': dj_database_url.config(
         default=os.environ.get('DATABASE_URL'),
@@ -160,7 +160,7 @@ LEAFLET_CONFIG = {
 }
 
 # API Keys
-POSITIONSTACK_API_KEY = os.environ.get('POSITIONSTACK_API_KEY')
+POSITIONSTACK_API_KEY = os.environ.get('POSITIONSTACK_API_KEY', '88bcabc4997f720becd5cb84b44c7b6e')
 
 # REST Framework
 REST_FRAMEWORK = {
