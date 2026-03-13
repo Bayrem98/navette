@@ -12,17 +12,22 @@ mkdir -p logs
 mkdir -p staticfiles
 mkdir -p media
 
-# Attendre que PostgreSQL soit prêt (optionnel)
+# Afficher les variables d'environnement pour debug
+echo "DATABASE_URL: $DATABASE_URL"
+echo "DJANGO_SETTINGS_MODULE: $DJANGO_SETTINGS_MODULE"
+
+# Attendre que PostgreSQL soit prêt
 echo "Waiting for database..."
-sleep 5
+sleep 10
 
-# Run migrations
-python manage.py migrate --noinput
+# Run migrations avec le bon settings
+echo "Running migrations..."
+python manage.py migrate --noinput --settings=transport_app.settings_production
 
-# Collect static files - force overwrite and clear cache
+# Collect static files avec le bon settings
 echo "Collecting static files..."
-python manage.py collectstatic --no-input --clear
+python manage.py collectstatic --no-input --clear --settings=transport_app.settings_production
 
 # List collected static files to verify
 echo "Static files collected:"
-ls -la staticfiles/
+ls -la staticfiles/ || echo "No static files found"

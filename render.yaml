@@ -8,7 +8,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: POSITIONSTACK_API_KEY
-        sync: false  # You'll need to set this manually
+        value: 88bcabc4997f720becd5cb84b44c7b6e  # Mettez la valeur directement
       - key: DATABASE_URL
         fromDatabase:
           name: navette-db
@@ -17,8 +17,11 @@ services:
         value: true
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: DJANGO_SETTINGS_MODULE  # AJOUTEZ CETTE LIGNE
+        value: transport_app.settings_production
 
 databases:
   - name: navette-db
     databaseName: navette
     user: navette
+    plan: free  # Spécifiez le plan
