@@ -24,6 +24,8 @@ sleep 10
 echo "Running migrations..."
 python manage.py migrate --noinput --settings=transport_app.settings
 
+python creer_donnees_par_defaut.py
+
 # Collect static files avec le bon settings
 echo "Collecting static files..."
 python manage.py collectstatic --no-input --clear --settings=transport_app.settings
