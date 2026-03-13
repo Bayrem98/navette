@@ -10,7 +10,7 @@ media/
 staticfiles/
 
 # Environnement
-
+.env
 .venv
 env/
 venv/
