@@ -461,7 +461,7 @@ def mobile_reservation_view(request):
 
 def mobile_historique_view(request):
     """Page historique"""
-    return render(request, 'chauffeurs_mobile/historique.html')
+    return render(request, 'chauffeurs_mobile/Historique.html')
 
 def mobile_profile_view(request):
     """Page profil"""
