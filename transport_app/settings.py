@@ -124,12 +124,17 @@ else:
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
-# Configuration spécifique pour l'interface mobile
+# Configuration spécifique pour l'interface mobile - VERSION COMPLÈTE
 MOBILE_SESSION_COOKIE_NAME = 'mobile_sessionid'  # Nom du cookie pour l'interface mobile
-MOBILE_SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 jours (optionnel)
+MOBILE_SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 jours
 MOBILE_SESSION_COOKIE_SECURE = not DEBUG  # HTTPS en production
 MOBILE_SESSION_COOKIE_HTTPONLY = True
 MOBILE_SESSION_COOKIE_SAMESITE = 'Lax'
+MOBILE_SESSION_COOKIE_PATH = '/'  # Chemin du cookie (racine du site)
+MOBILE_SESSION_COOKIE_DOMAIN = None  # Domaine (None = domaine actuel)
+MOBILE_SESSION_ENGINE = 'django.contrib.sessions.backends.db'  # Moteur de session
+MOBILE_SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # N'expire pas à la fermeture
+MOBILE_SESSION_SAVE_EVERY_REQUEST = True  # Sauvegarder à chaque requête
 
 # Configuration CSRF
 CSRF_COOKIE_HTTPONLY = False  # Doit être False pour l'accès JavaScript
