@@ -1,0 +1,1757 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Chauffeur</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .user-info h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .user-info p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .logout-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        /* Panel de notifications */
+        #notificationsPanel {
+            display: none;
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            color: #856404;
+            padding: 15px 20px;
+            border-bottom: 2px solid #ffd54f;
+            animation: slideDown 0.3s ease;
+        }
+        
+        @keyframes slideDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .notifications-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .notification-badge {
+            background: #ff9800;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        
+        .notification-actions button {
+            margin-left: 10px;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .notification-actions .btn-view {
+            background: #ff9800;
+            color: white;
+        }
+        
+        .notification-actions .btn-mark-all {
+            background: #6c757d;
+            color: white;
+        }
+        
+        /* Toast notification */
+        .notification-toast {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 9999;
+            max-width: 400px;
+            animation: slideInRight 0.3s ease;
+            border-left: 4px solid #ff9800;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        .notification-toast.success {
+            border-left-color: #4caf50;
+            background: #e8f5e9;
+        }
+        
+        .notification-toast.error {
+            border-left-color: #f44336;
+            background: #ffebee;
+        }
+        
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .main-content {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .value.positive {
+            color: #28a745;
+        }
+        
+        .section-title {
+            margin: 30px 0 20px 0;
+            color: #333;
+            font-size: 20px;
+        }
+        
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .action-card {
+            background: white;
+            padding: 30px 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        
+        .action-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        }
+        
+        .action-card i {
+            font-size: 40px;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+        
+        .action-card h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .action-card p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .courses-list {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .course-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .course-item:last-child {
+            border-bottom: none;
+        }
+        
+        .course-time {
+            font-weight: bold;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        .course-type {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: inline-block;
+            margin-top: 5px;
+        }
+        
+        .course-status {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .status-a-faire {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .status-validee {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        .status-terminee {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .status-attente {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-demande {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        .revenu-total {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+        
+        .course-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        
+        .action-btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .btn-terminer {
+            background: #ff9800;
+            color: white;
+        }
+        
+        .btn-valider {
+            background: #2196f3;
+            color: white;
+        }
+        
+        .btn-annuler {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn-validee {
+            background: #4caf50;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        
+        /* Super chauffeur card */
+        .super-card {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%) !important;
+            color: white !important;
+            border: 2px solid #ff9800 !important;
+        }
+
+        .super-card:hover {
+            transform: translateY(-5px) !important;
+            box-shadow: 0 10px 20px rgba(255, 152, 0, 0.3) !important;
+        }
+        
+        /* ============================================
+           SECTION NOTIFICATIONS RÉCENTES - STYLES GÉNÉRAUX
+           ============================================ */
+        
+        /* Section notifications récentes */
+        .notifications-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .notification-item {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #ff9800;
+            transition: transform 0.2s;
+        }
+        
+        .notification-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .notification-item.read {
+            opacity: 0.7;
+            border-left-color: #ccc;
+        }
+        
+        .notification-item.unread {
+            border-left-color: #ff9800;
+            background: #fff8e1;
+        }
+        
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .notification-type {
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-weight: bold;
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .notification-type.super_reservation {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        .notification-type.super_annulation {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .notification-type.reservation {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .notification-message {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .notification-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .notification-time {
+            font-style: italic;
+        }
+        
+        .notification-actions button {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            margin-left: 5px;
+        }
+        
+        .btn-mark-read {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .btn-mark-read:hover {
+            background: #388e3c;
+        }
+        
+        .btn-read {
+            background: #ccc;
+            color: #666;
+            cursor: default;
+        }
+        
+        .no-notifications {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .view-all-btn {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .view-all-btn a {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        .view-all-btn a:hover {
+            background: #5a67d8;
+        }
+        
+        /* RESPONSIVE - MOBILE */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+                gap: 15px;
+            }
+            
+            .main-content {
+                padding: 15px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .actions-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .course-item {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .course-actions {
+                justify-content: flex-start;
+            }
+            
+            .notifications-header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+            
+            .notification-actions {
+                display: flex;
+                gap: 10px;
+            }
+            
+            /* Adaptations spécifiques pour les notifications sur mobile */
+            .notification-item {
+                padding: 12px;
+            }
+            
+            .notification-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .notification-footer {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+            
+            .notification-actions {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+  </head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="user-info">
+                <h1 id="chauffeurName">Chargement...</h1>
+                <p id="currentDate"></p>
+            </div>
+            <button class="logout-btn" onclick="logout()">
+                <span style="margin-right: 8px;">🚪</span> Déconnexion
+            </button>
+        </div>
+    </div>
+    
+    <!-- Panel de notifications -->
+    <div id="notificationsPanel" style="display: none;">
+        <div class="notifications-header">
+            <div style="font-weight: bold; display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">🔔</span>
+                <span id="notificationsCount">0 nouvelle(s) notification(s)</span>
+                <span class="notification-badge" id="notificationBadge">0</span>
+            </div>
+            <div class="notification-actions">
+                <button class="btn-view" onclick="showNotifications()">
+                    📋 Voir toutes
+                </button>
+                <button class="btn-mark-all" onclick="markAllNotificationsRead()">
+                    ✅ Tout marquer comme lu
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <!-- Statistiques -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>Courses aujourdhui</h3>
+        <div class="value" id="statCoursesToday">0</div>
+    </div>
+    
+    <div class="stat-card">
+        <h3>Validées</h3>
+        <div class="value positive" id="statValidees">0</div>
+    </div>
+    
+    <!-- CARTE REVENU - UNIQUEMENT POUR SUPER CHAUFFEUR -->
+    <div class="stat-card revenu-total" id="revenuCard" style="display: none;">
+        <h3 style="color: white;">Revenu validé</h3>
+        <div class="value" id="statRevenu">0 DNT</div>
+    </div>
+    
+    <!-- Carte alternative pour chauffeurs normaux -->
+    <div class="stat-card" id="normalCard">
+        <h3>Performance</h3>
+        <div class="value">📊</div>
+    </div>
+</div>        
+        <!-- Actions -->
+        <h2 class="section-title">Actions</h2>
+        <div class="actions-grid">
+            <a href="/mobile/selection/" class="action-card">
+                <div>📋</div>
+                <h3>Sélectionner agents</h3>
+                <p>Créer une nouvelle course</p>
+            </a>
+            
+            <!-- NOUVELLE CARTE RÉSERVATION J+1 -->
+            <a href="/mobile/reservation/" class="action-card">
+                <div style="color: #ff9800;">📅</div>
+                <h3>Réservation J+1</h3>
+                <p>Réserver les agents pour demain</p>
+            </a>
+            
+            <a href="/mobile/historique/" class="action-card">
+                <div>📊</div>
+                <h3>Historique</h3>
+                <p>Voir les courses du mois en cours</p>
+            </a>
+            
+            <a href="/mobile/profile/" class="action-card">
+                <div>👤</div>
+                <h3>Mon profil</h3>
+                <p>Informations personnelles</p>
+            </a>
+        </div>
+        <!-- Section Notifications récentes -->
+        <h2 class="section-title">
+            🔔 Mes notifications récentes
+            <button onclick="showAllNotifications()" style="margin-left: 15px; padding: 5px 15px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
+                Voir l'historique complet
+            </button>
+        </h2>
+        
+        <div id="recentNotifications" style="margin-bottom: 30px;">
+            <div class="loading">
+                <p>Chargement des notifications...</p>
+            </div>
+        </div>        
+           <!-- NOUVELLE ACTION SUPER-CHAFFEUR -->
+        <div id="superChauffeurAction" style="display: none;">
+            <a href="/mobile/super/dashboard/" class="action-card super-card">
+                <div>👑</div>
+                <h3>Super Dashboard</h3>
+                <p>Voir tous les chauffeurs et courses</p>
+            </a>
+        </div>
+        
+        <!-- Courses d'aujourd'hui -->
+        <h2 class="section-title">Courses d'aujourdhui <small>(à faire)</small></h2>
+        <div class="courses-list" id="coursesAujourdhui">
+            <div class="loading">
+                <p>Chargement des courses...</p>
+            </div>
+        </div>
+<div id="groupedNotificationsSection" style="margin-top: 40px;">
+    <!-- Le contenu sera injecté par JavaScript -->
+</div>
+    <script>
+    // ============================================
+    // FONCTIONS UTILITAIRES
+    // ============================================
+    
+    function formatDate(date) {
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        return date.toLocaleDateString('fr-FR', options);
+    }
+    
+    document.getElementById('currentDate').textContent = formatDate(new Date());
+    
+    // Fonction pour récupérer le token CSRF
+    function getCsrfToken() {
+        const name = 'csrftoken';
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    // ============================================
+    // GESTION DES COURSES
+    // ============================================
+    
+    async function terminerCourse(courseId) {
+        if (confirm('Marquer cette course comme terminée ?')) {
+            try {
+                const response = await fetch('/mobile/api/course/terminer/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({course_id: courseId})
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('✅ Course terminée', 'success');
+                    loadDashboardData();
+                } else {
+                    showToast('❌ ' + data.error, 'error');
+                }
+            } catch (error) {
+                showToast('Erreur réseau', 'error');
+            }
+        }
+    }
+    
+    async function demanderValidation(courseId) {
+        const notes = prompt("Notes pour l'admin (optionnel):", "");
+        
+        try {
+            const response = await fetch('/mobile/api/course/demander-validation/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    course_id: courseId,
+                    notes: notes || ''
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('✅ Demande de validation envoyée', 'success');
+                loadDashboardData();
+            } else {
+                showToast('❌ ' + data.error, 'error');
+            }
+        } catch (error) {
+            showToast('Erreur réseau', 'error');
+        }
+    }
+    
+    async function annulerCourse(courseId) {
+        if (confirm('Annuler cette course ? Cette action est irréversible.')) {
+            try {
+                const response = await fetch('/mobile/api/course/annuler/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({course_id: courseId})
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('✅ Course annulée', 'success');
+                    loadDashboardData();
+                } else {
+                    showToast('❌ ' + data.error, 'error');
+                }
+            } catch (error) {
+                showToast('Erreur réseau', 'error');
+            }
+        }
+    }
+    
+    // ============================================
+    // GESTION DES NOTIFICATIONS - CORRIGÉE
+    // ============================================
+    
+    // Fonction pour afficher un toast
+    function showToast(message, type = 'success') {
+        // Supprimer les anciens toasts
+        document.querySelectorAll('.notification-toast').forEach(toast => {
+            toast.remove();
+        });
+        
+        const toast = document.createElement('div');
+        toast.className = `notification-toast ${type}`;
+        
+        let icon = '✅';
+        if (type === 'error') icon = '❌';
+        if (type === 'warning') icon = '⚠️';
+        if (type === 'info') icon = 'ℹ️';
+        
+        toast.innerHTML = `
+            <div style="font-size: 24px;">${icon}</div>
+            <div style="flex: 1; font-size: 14px;">
+                ${message}
+            </div>
+            <button onclick="this.parentElement.remove()" style="background: none; border: none; cursor: pointer; font-size: 20px; color: #666;">×</button>
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // Supprimer après 5 secondes
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 5000);
+        
+        return toast;
+    }
+    
+    // Vérifier les notifications
+    async function checkNotifications() {
+        try {
+            console.log("🔔 Vérification des notifications...");
+            const response = await fetch('/mobile/api/notifications/', {
+                credentials: 'include'
+            });
+            
+            const data = await response.json();
+            console.log("📦 Données notifications:", data);
+            
+            if (data.success) {
+                updateNotificationsUI(data);
+                
+                // Afficher la dernière notification non lue
+                const unread = data.notifications.filter(n => !n.vue);
+                if (unread.length > 0) {
+                    const latest = unread[0];
+                    showNotificationToast(latest);
+                }
+            } else {
+                console.error('Erreur notifications:', data.error);
+            }
+        } catch (error) {
+            console.log('Erreur réseau notifications:', error);
+        }
+    }
+    
+    // Mettre à jour l'interface des notifications
+    function updateNotificationsUI(data) {
+        const panel = document.getElementById('notificationsPanel');
+        const countSpan = document.getElementById('notificationsCount');
+        const badge = document.getElementById('notificationBadge');
+        
+        if (data.unread_count > 0) {
+            // Afficher le panneau
+            panel.style.display = 'block';
+            countSpan.textContent = `${data.unread_count} nouvelle(s) notification(s)`;
+            badge.textContent = data.unread_count;
+            
+            // Animation de pulsation pour le badge
+            badge.style.animation = 'none';
+            setTimeout(() => {
+                badge.style.animation = 'pulse 1s infinite';
+            }, 10);
+        } else {
+            panel.style.display = 'none';
+        }
+    }
+    
+    // Afficher une notification toast
+    function showNotificationToast(notification) {
+        // Vérifier si déjà affiché récemment
+        const toastId = `toast-${notification.id}`;
+        if (document.getElementById(toastId)) {
+            return;
+        }
+        
+        const toast = document.createElement('div');
+        toast.id = toastId;
+        toast.className = 'notification-toast';
+        
+        let icon = '🔔';
+        if (notification.type === 'super_reservation') icon = '📅';
+        if (notification.type === 'super_annulation') icon = '❌';
+        if (notification.type === 'reservation') icon = '✅';
+        if (notification.type === 'annulation') icon = '⚠️';
+        
+        toast.innerHTML = `
+            <div style="font-size: 24px;">${icon}</div>
+            <div style="flex: 1;">
+                <div style="font-weight: bold; margin-bottom: 5px;">
+                    ${notification.type_display || 'Notification'}
+                </div>
+                <div style="font-size: 14px;">${notification.message}</div>
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                    ${notification.created_at}
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                    <button onclick="markNotificationAsRead(${notification.id}, this)" 
+                            style="padding: 5px 10px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                        ✓ Marquer comme lu
+                    </button>
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()" 
+                            style="padding: 5px 10px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                        ✕ Fermer
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // Supprimer après 8 secondes
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 8000);
+    }
+    
+    // Marquer une notification comme lue
+    async function markNotificationAsRead(notificationId, button) {
+        try {
+            console.log("📝 Marquer comme lu:", notificationId);
+            
+            const response = await fetch(`/mobile/api/notifications/${notificationId}/read/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                credentials: 'include'
+            });
+            
+            const data = await response.json();
+            console.log("📦 Réponse:", data);
+            
+            if (data.success) {
+                // Mettre à jour l'affichage
+                if (button) {
+                    button.textContent = '✓ Lu';
+                    button.disabled = true;
+                    button.style.background = '#ccc';
+                }
+                
+                // Recharger les notifications
+                setTimeout(checkNotifications, 500);
+                showToast('✅ Notification marquée comme lue', 'success');
+            } else {
+                showToast('❌ ' + data.error, 'error');
+            }
+        } catch (error) {
+            console.log('Erreur:', error);
+            showToast('Erreur de connexion', 'error');
+        }
+    }
+    
+    // Marquer TOUTES les notifications comme lues
+    async function markAllNotificationsRead() {
+        if (!confirm('Marquer toutes les notifications comme lues ?')) {
+            return;
+        }
+        
+        try {
+            console.log("📨 Marquer toutes comme lues...");
+            const response = await fetch('/mobile/api/notifications/mark-all-read/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                credentials: 'include'
+            });
+            
+            const data = await response.json();
+            console.log("Réponse:", data);
+            
+            if (data.success) {
+                showToast(`✅ ${data.message}`, 'success');
+                // Recharger les notifications
+                setTimeout(checkNotifications, 1000);
+            } else {
+                showToast(`❌ ${data.error}`, 'error');
+            }
+        } catch (error) {
+            console.log('Erreur:', error);
+            showToast('Erreur de connexion', 'error');
+        }
+    }
+    
+    // Ouvrir la page des notifications
+    function showNotifications() {
+        window.open('/mobile/notifications/', '_blank');
+    }
+    
+    // ============================================
+    // DASHBOARD PRINCIPAL
+    // ============================================
+    
+    async function loadDashboardData() {
+        try {
+            console.log("📡 Chargement du dashboard...");
+            const response = await fetch('/mobile/api/dashboard/', {
+                credentials: 'include'
+            });
+            
+            const data = await response.json();
+            console.log("📊 Données dashboard reçues:", data);
+            
+            if (data.success) {
+                // Nom du chauffeur
+                if (data.chauffeur && data.chauffeur.nom) {
+                    document.getElementById('chauffeurName').textContent = data.chauffeur.nom;
+                }
+                
+                // Super chauffeur
+                if (data.chauffeur && data.chauffeur.super_chauffeur === true) {
+                    document.getElementById('superChauffeurAction').style.display = 'block';
+                    console.log("✅ Super chauffeur détecté - Bouton affiché");
+                } else {
+                    console.log("ℹ️  Chauffeur normal - Pas de super accès");
+                }                
+                
+                // Statistiques
+                if (data.dashboard && data.dashboard.stats) {
+                    const stats = data.dashboard.stats;
+                    
+                    // Courses aujourd'hui
+                    document.getElementById('statCoursesToday').textContent = stats.total_courses || 0;
+                    
+                    // Courses validées
+                    document.getElementById('statValidees').textContent = stats.courses_validees || 0;
+                    
+                    // Revenu validé
+                    const revenuElement = document.getElementById('statRevenu');
+                    if (stats.revenu_valide_display) {
+                        revenuElement.textContent = stats.revenu_valide_display;
+                    } else if (stats.revenu_valide !== undefined) {
+                        revenuElement.textContent = `${parseFloat(stats.revenu_valide || 0).toFixed(2)} DNT`;
+                    } else {
+                        revenuElement.textContent = "0.00 DNT";
+                    }
+                    
+                    // Date
+                    if (data.dashboard.date) {
+                        document.getElementById('currentDate').textContent = data.dashboard.date;
+                    }
+                }
+                
+                // Afficher courses d'aujourd'hui
+                displayCoursesToday(data);
+                
+            } else {
+                // Erreur d'authentification
+                if (data.message && data.message.includes('Session')) {
+                    console.log("🔐 Session expirée, redirection vers login");
+                    window.location.href = '/mobile/login/';
+                } else {
+                    document.getElementById('coursesAujourdhui').innerHTML = 
+                        '<div class="error">' + (data.message || 'Erreur de chargement') + '</div>';
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Erreur:', error);
+            document.getElementById('coursesAujourdhui').innerHTML = 
+                '<div class="error">Erreur de connexion au serveur</div>';
+        }
+    }
+    
+    function displayCoursesToday(data) {
+        const coursesContainer = document.getElementById('coursesAujourdhui');
+        
+        if (data.dashboard && data.dashboard.courses_aujourdhui && 
+            data.dashboard.courses_aujourdhui.length > 0) {
+            
+            let coursesHtml = '';
+            data.dashboard.courses_aujourdhui.forEach(course => {
+                // Déterminer la couleur selon le statut
+                let statusClass = 'status-a-faire';
+                let statusText = course.statut_display || course.statut;
+                
+                if (course.statut === 'validee' || course.statut === 'payee') {
+                    statusClass = 'status-validee';
+                } else if (course.statut === 'terminee') {
+                    statusClass = 'status-terminee';
+                } else if (course.statut === 'en_attente') {
+                    statusClass = 'status-attente';
+                } else if (course.statut === 'demande_validation') {
+                    statusClass = 'status-demande';
+                } else if (course.statut === 'annulee') {
+                    statusClass = 'status-annulee';
+                }
+                
+                // Générer les boutons d'action
+                let actionsHtml = '';
+                
+                if (course.statut === 'en_attente' || course.statut === 'en_cours') {
+                    actionsHtml += '<button class="action-btn btn-terminer" onclick="terminerCourse(' + course.id + ')">✓ Terminer</button>';
+                }
+                
+                if (course.statut === 'terminee') {
+                    actionsHtml += '<button class="action-btn btn-valider" onclick="demanderValidation(' + course.id + ')">✅ Valider</button>';
+                }
+                
+                if (course.statut === 'demande_validation') {
+                    actionsHtml += '<span style="color: #ff9800; font-size: 12px;">⏳ En attente validation admin</span>';
+                }
+                
+                if (course.statut === 'validee' || course.statut === 'payee') {
+                    actionsHtml += '<span class="btn-validee">✅ Validée</span>';
+                }
+                
+                coursesHtml += `
+                    <div class="course-item">
+                        <div style="flex: 1;">
+                            <div class="course-time">${course.heure_display || course.heure}</div>
+                            <div class="course-type">${course.type_display || course.type}</div>
+                            <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                                ${course.nb_agents} agent(s) • ${course.prix ? parseFloat(course.prix).toFixed(2) + ' DNT' : 'Prix non défini'}
+                            </div>
+                            <div class="course-actions">${actionsHtml}</div>
+                        </div>
+                        <div class="course-status ${statusClass}">
+                            ${statusText}
+                        </div>
+                    </div>
+                `;
+            });
+            coursesContainer.innerHTML = coursesHtml;
+            
+        } else {
+            coursesContainer.innerHTML = `
+                <div class="no-data">
+                    <p>📭 Aucune course programmée aujourdhui</p>
+                    <p style="margin-top: 10px;">
+                        <a href="/mobile/selection/" style="color: #667eea; text-decoration: none;">
+                            ➕ Créer une course
+                        </a>
+                    </p>
+                </div>
+            `;
+        }
+    }
+    
+    async function logout() {
+        if (confirm('Voulez-vous vraiment vous déconnecter ?')) {
+            try {
+                const response = await fetch('/mobile/api/logout/', { 
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Déconnecté:', data);
+                }
+                
+            } catch (error) {
+                console.error('Erreur déconnexion:', error);
+            }
+            
+            // Redirection après 500ms
+            setTimeout(() => {
+                window.location.href = '/mobile/login/';
+            }, 500);
+        }
+    }
+   // ============================================
+    // AFFICHAGE DES NOTIFICATIONS RÉCENTES DANS LE DASHBOARD
+    // ============================================
+    
+    async function loadRecentNotifications() {
+        try {
+            console.log("📨 Chargement des notifications récentes...");
+            const response = await fetch('/mobile/api/notifications/', {
+                credentials: 'include'
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                displayRecentNotifications(data.notifications);
+            } else {
+                document.getElementById('recentNotifications').innerHTML = 
+                    '<div class="error">Erreur de chargement des notifications</div>';
+            }
+        } catch (error) {
+            console.log('Erreur chargement notifications:', error);
+            document.getElementById('recentNotifications').innerHTML = 
+                '<div class="error">Erreur de connexion</div>';
+        }
+    }
+    
+// Dans dashboard.html - fonction complète
+function displayRecentNotifications(notifications) {
+    const container = document.getElementById('recentNotifications');
+    
+    if (!notifications || notifications.length === 0) {
+        container.innerHTML = `
+            <div class="no-notifications">
+                <div style="font-size: 48px; margin-bottom: 20px;">📭</div>
+                <p>Aucune notification pour le moment</p>
+                <p style="font-size: 14px; margin-top: 10px; color: #999;">
+                    Vous serez notifié pour les réservations, annulations et messages importants
+                </p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Limiter à 5 notifications les plus récentes
+    const recentNotifications = notifications.slice(0, 5);
+    
+    let html = `
+        <div style="margin-bottom: 15px; color: #666; font-size: 14px;">
+            ${notifications.length} notification(s) • 
+            ${notifications.filter(n => !n.vue).length} non lue(s)
+        </div>
+        <div class="notifications-container">
+    `;
+    
+    recentNotifications.forEach(notification => {
+        // Déterminer l'icône et la classe selon le type
+        let icon = '🔔';
+        let typeClass = 'notification-type';
+        
+        // Vérifier si c'est une notification groupée
+        const isGrouped = notification.data?.is_grouped === true;
+        const agentsCount = notification.data?.agents_count || 0;
+        const agentsList = notification.data?.agents || [];
+        
+        // Assigner icône et classe selon le type
+        if (notification.type === 'super_reservation') {
+            if (isGrouped && agentsCount > 1) {
+                icon = '👑📋'; // Icône pour réservation groupée
+                typeClass += ' super_reservation';
+            } else {
+                icon = '👑';
+                typeClass += ' super_reservation';
+            }
+        } else if (notification.type === 'super_annulation') {
+            icon = '❌';
+            typeClass += ' super_annulation';
+        } else if (notification.type === 'reservation') {
+            if (isGrouped && agentsCount > 1) {
+                icon = '📋✅';
+                typeClass += ' reservation';
+            } else {
+                icon = '✅';
+                typeClass += ' reservation';
+            }
+        } else if (notification.type === 'annulation') {
+            icon = '⚠️';
+            typeClass += ' annulation';
+        } else if (notification.type === 'info') {
+            icon = 'ℹ️';
+        } else if (notification.type === 'agent_selection') {
+            icon = '👤';
+        } else if (notification.type === 'transport_confirmation') {
+            icon = '🚗✅';
+        }
+        
+        // Formater la date
+        const date = new Date(notification.created_at);
+        const now = new Date();
+        const diffHours = Math.floor((now - date) / (1000 * 60 * 60));
+        
+        let timeAgo = '';
+        if (diffHours < 1) {
+            timeAgo = 'Il y a quelques minutes';
+        } else if (diffHours < 24) {
+            timeAgo = `Il y a ${diffHours} heure${diffHours > 1 ? 's' : ''}`;
+        } else {
+            timeAgo = date.toLocaleDateString('fr-FR', { 
+                day: 'numeric', 
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        // Affichage différent pour les notifications groupées
+        if (isGrouped && agentsCount > 1) {
+            // NOTIFICATION GROUPÉE
+            html += `
+                <div class="notification-item ${notification.vue ? 'read' : 'unread'}" id="notification-${notification.id}">
+                    <div class="notification-header">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="font-size: 20px;">${icon}</div>
+                            <span class="${typeClass}">
+                                ${notification.type_display || notification.type}
+                                <span style="font-size: 11px; margin-left: 5px; background: #4361ee; color: white; padding: 2px 6px; border-radius: 10px;">
+                                    ${agentsCount} agent(s)
+                                </span>
+                            </span>
+                        </div>
+                        ${!notification.vue ? '<span style="color: #ff9800; font-size: 12px;">● Nouveau</span>' : ''}
+                    </div>
+                    
+                    <div class="notification-message">
+                        <strong>${notification.message}</strong>
+                    </div>
+                    
+                    <div style="font-size: 13px; color: #666; margin: 12px 0; padding: 10px; background: #f8f9ff; border-radius: 8px; border-left: 3px solid #4361ee;">
+                        <div style="margin-bottom: 8px; font-weight: bold; color: #333;">
+                            👥 Liste des agents réservés:
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; max-height: 150px; overflow-y: auto; padding: 5px;">
+                            ${agentsList.map(agent => `
+                                <div style="padding: 6px 10px; background: white; border-radius: 6px; border: 1px solid #e3e6ff; font-size: 12px;">
+                                    <span style="color: #4361ee; margin-right: 5px;">•</span>
+                                    ${agent}
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <div style="margin-top: 10px; font-size: 12px; color: #666; display: flex; gap: 15px;">
+                            ${notification.data?.type_transport ? `
+                                <span>
+                                    <strong>🚗 Type:</strong> ${notification.data.type_transport}
+                                </span>
+                            ` : ''}
+                            ${notification.data?.heure_libelle ? `
+                                <span>
+                                    <strong>⏰ Heure:</strong> ${notification.data.heure_libelle}
+                                </span>
+                            ` : ''}
+                            ${notification.data?.date_transport ? `
+                                <span>
+                                    <strong>📅 Date:</strong> ${new Date(notification.data.date_transport).toLocaleDateString('fr-FR')}
+                                </span>
+                            ` : ''}
+                        </div>
+                        
+                        ${notification.data?.super_chauffeur ? `
+                            <div style="margin-top: 8px; padding: 5px 10px; background: #fff3e0; border-radius: 5px; font-size: 12px;">
+                                <strong>👑 Super chauffeur:</strong> ${notification.data.super_chauffeur}
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="notification-footer">
+                        <div class="notification-time">
+                            ${timeAgo}
+                        </div>
+                        <div class="notification-actions">
+                            ${!notification.vue ? `
+                                <button class="btn-mark-read" onclick="markAsReadFromDashboard(${notification.id})">
+                                    ✓ Marquer comme lu
+                                </button>
+                            ` : `
+                                <button class="btn-read" disabled>
+                                    ✓ Lu
+                                </button>
+                            `}
+                            ${notification.data?.heure_transport_id ? `
+                                <button onclick="viewTransportDetails(${notification.data.heure_transport_id}, '${notification.data.date_transport}')" 
+                                        style="background: #2196f3; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                                    👁️ Voir détails
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            // NOTIFICATION INDIVIDUELLE
+            html += `
+                <div class="notification-item ${notification.vue ? 'read' : 'unread'}" id="notification-${notification.id}">
+                    <div class="notification-header">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="font-size: 20px;">${icon}</div>
+                            <span class="${typeClass}">
+                                ${notification.type_display || notification.type}
+                            </span>
+                        </div>
+                        ${!notification.vue ? '<span style="color: #ff9800; font-size: 12px;">● Nouveau</span>' : ''}
+                    </div>
+                    
+                    <div class="notification-message">
+                        ${notification.message}
+                    </div>
+                    
+                    ${notification.data && notification.data.agent_nom ? `
+                        <div style="font-size: 13px; color: #666; margin-bottom: 10px; padding: 8px; background: #f5f5f5; border-radius: 5px;">
+                            <strong>👤 Agent:</strong> ${notification.data.agent_nom}
+                            ${notification.data.type_transport ? `<br><strong>🚗 Type:</strong> ${notification.data.type_transport}` : ''}
+                            ${notification.data.heure_libelle ? `<br><strong>⏰ Heure:</strong> ${notification.data.heure_libelle}` : ''}
+                            ${notification.data.super_chauffeur ? `<br><strong>👑 Par:</strong> ${notification.data.super_chauffeur}` : ''}
+                        </div>
+                    ` : ''}
+                    
+                    ${notification.data && notification.data.nb_agents ? `
+                        <div style="font-size: 13px; color: #666; margin-bottom: 10px; padding: 8px; background: #e8f5e9; border-radius: 5px;">
+                            <strong>🚗 Transport:</strong> ${notification.data.nb_agents} agent(s) à ${notification.data.heure_libelle}
+                        </div>
+                    ` : ''}
+                    
+                    <div class="notification-footer">
+                        <div class="notification-time">
+                            ${timeAgo}
+                        </div>
+                        <div class="notification-actions">
+                            ${!notification.vue ? `
+                                <button class="btn-mark-read" onclick="markAsReadFromDashboard(${notification.id})">
+                                    ✓ Marquer comme lu
+                                </button>
+                            ` : `
+                                <button class="btn-read" disabled>
+                                    ✓ Lu
+                                </button>
+                            `}
+                            ${notification.data && notification.data.reservation_id ? `
+                                <button onclick="viewReservation(${notification.data.reservation_id})" 
+                                        style="background: #2196f3; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                                    👁️ Voir
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    });
+    
+    html += `</div>`;
+    
+    // Ajouter le bouton "Voir tout l'historique"
+    if (notifications.length > 5) {
+        html += `
+            <div class="view-all-btn">
+                <button onclick="showAllNotifications()" 
+                        style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                    📋 Voir les ${notifications.length - 5} notifications plus anciennes
+                </button>
+            </div>
+        `;
+    } else {
+        html += `
+            <div class="view-all-btn">
+                <button onclick="showAllNotifications()" 
+                        style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                    📋 Voir l'historique complet
+                </button>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+// Fonction auxiliaire pour voir les détails d'un transport
+function viewTransportDetails(heureTransportId, dateTransport) {
+    // Cette fonction doit être définie dans votre JavaScript principal
+    if (typeof window.viewTransportDetails === 'function') {
+        window.viewTransportDetails(heureTransportId, dateTransport);
+    } else {
+        // Fallback: ouvrir la page de réservation avec filtres
+        const dateObj = new Date(dateTransport);
+        const dateStr = dateObj.toISOString().split('T')[0];
+        window.open(`/mobile/reservation/?date=${dateStr}&heure_id=${heureTransportId}`, '_blank');
+    }
+}
+// Fonction pour charger les notifications groupées
+async function loadGroupedNotificationsSummary() {
+    try {
+        console.log("📡 Chargement des notifications groupées...");
+        
+        const container = document.getElementById('groupedNotificationsSection');
+        if (!container) {
+            console.log("❌ Conteneur non trouvé");
+            return;
+        }
+        
+        // Afficher un indicateur de chargement
+        container.innerHTML = `
+            <div class="loading" style="padding: 20px; text-align: center;">
+                <div style="font-size: 40px; margin-bottom: 10px;">⏳</div>
+                <p>Chargement des transports programmés...</p>
+            </div>
+        `;
+        
+        const response = await fetch('/mobile/api/notifications/grouped/', {
+            credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.grouped_notifications && data.grouped_notifications.length > 0) {
+            console.log(`✅ ${data.grouped_notifications.length} groupe(s) trouvé(s)`);
+            
+            let html = `
+                <h2 class="section-title" style="margin-bottom: 20px;">
+                    🕐 Transports programmés
+                    <span style="font-size: 14px; color: #666; margin-left: 10px;">
+                        ${data.grouped_notifications.length} heure(s) de transport
+                    </span>
+                </h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+            `;
+            
+            data.grouped_notifications.slice(0, 3).forEach(group => {
+                const agentsCount = group.count || 0;
+                const heureDisplay = group.heure_libelle || 'Heure non spécifiée';
+                const dateDisplay = group.date_transport || 'Non spécifiée';
+                const typeDisplay = group.type_transport_display || 'Transport';
+                
+                html += `
+                    <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-left: 4px solid #667eea;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <div style="font-weight: bold; font-size: 18px; color: #333;">
+                                ${typeDisplay} ${heureDisplay}
+                            </div>
+                            <span style="background: #ff9800; color: white; padding: 3px 10px; border-radius: 15px; font-size: 12px; font-weight: bold;">
+                                ${agentsCount} notification(s)
+                            </span>
+                        </div>
+                        <div style="color: #666; margin-bottom: 10px;">
+                            📅 ${dateDisplay}
+                        </div>
+                        ${group.notifications && group.notifications.length > 0 ? `
+                            <div style="margin-top: 10px;">
+                                <div style="font-size: 14px; color: #333; margin-bottom: 8px;">
+                                    Dernières notifications :
+                                </div>
+                                ${group.notifications.slice(0, 3).map(notif => `
+                                    <div style="font-size: 13px; color: #666; margin-bottom: 5px; padding-left: 10px; border-left: 2px solid #ddd;">
+                                        • ${notif.message}
+                                    </div>
+                                `).join('')}
+                                ${group.notifications.length > 3 ? `
+                                    <div style="font-size: 12px; color: #999; margin-top: 5px;">
+                                        + ${group.notifications.length - 3} autre(s)
+                                    </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+                        <button onclick="window.location.href='/mobile/notifications/'" 
+                                style="width: 100%; margin-top: 15px; padding: 10px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">
+                            📋 Voir tous les détails
+                        </button>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+            
+            // Si plus de 3 groupes, ajouter un bouton "Voir plus"
+            if (data.grouped_notifications.length > 3) {
+                html += `
+                    <div style="text-align: center; margin-top: 20px;">
+                        <button onclick="window.location.href='/mobile/notifications/'" 
+                                style="padding: 10px 20px; background: #f0f4ff; color: #667eea; border: 2px solid #667eea; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                            Voir les ${data.grouped_notifications.length - 3} heure(s) supplémentaires
+                        </button>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+            
+        } else {
+            // Aucune notification groupée
+            container.innerHTML = `
+                <h2 class="section-title" style="margin-bottom: 20px;">
+                    🕐 Transports programmés
+                </h2>
+                <div style="text-align: center; padding: 40px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                    <div style="font-size: 48px; margin-bottom: 20px;">📭</div>
+                    <p style="color: #666;">Aucun transport programmé pour le moment</p>
+                    <p style="font-size: 14px; margin-top: 10px; color: #999;">
+                        Vous verrez ici les heures de transport planifiées
+                    </p>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        console.log('Erreur chargement notifications groupées:', error);
+        
+        const container = document.getElementById('groupedNotificationsSection');
+        if (container) {
+            container.innerHTML = `
+                <h2 class="section-title" style="margin-bottom: 20px;">
+                    🕐 Transports programmés
+                </h2>
+                <div style="text-align: center; padding: 20px; background: #fff3cd; border-radius: 10px; border: 1px solid #ffeaa7;">
+                    <p style="color: #856404;">
+                        ⚠️ Impossible de charger les transports programmés
+                    </p>
+                    <button onclick="loadGroupedNotificationsSummary()" 
+                            style="margin-top: 10px; padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        🔄 Réessayer
+                    </button>
+                </div>
+            `;
+        }
+    }
+}
+    // Marquer comme lu depuis le dashboard
+async function markAsReadFromDashboard(notificationId) {
+        try {
+            const response = await fetch(`/mobile/api/notifications/${notificationId}/read/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                credentials: 'include'
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Mettre à jour l'affichage
+                const notificationEl = document.getElementById(`notification-${notificationId}`);
+                if (notificationEl) {
+                    notificationEl.className = 'notification-item read';
+                    
+                    // Mettre à jour les boutons
+                    const actionsDiv = notificationEl.querySelector('.notification-actions');
+                    if (actionsDiv) {
+                        actionsDiv.innerHTML = `
+                            <button class="btn-read" disabled>
+                                ✓ Lu
+                            </button>
+                        `;
+                    }
+                    
+                    // Retirer le badge "Nouveau"
+                    const newBadge = notificationEl.querySelector('.notification-header span:last-child');
+                    if (newBadge) {
+                        newBadge.remove();
+                    }
+                }
+                
+                // Recharger les compteurs
+                setTimeout(checkNotifications, 500);
+                showToast('✅ Notification marquée comme lue', 'success');
+            }
+        } catch (error) {
+            console.log('Erreur:', error);
+            showToast('Erreur lors du marquage', 'error');
+        }
+    }
+    
+    // Voir une réservation
+    function viewReservation(reservationId) {
+        // Ouvrir dans un nouvel onglet ou afficher un modal
+        alert(`Ouverture de la réservation #${reservationId}
+À implémenter selon votre structure`);
+        // window.open(`/mobile/reservation/detail/${reservationId}/`, '_blank');
+    }
+    
+    // Ouvrir la page complète des notifications
+    function showAllNotifications() {
+        window.open('/mobile/notifications/', '_blank');
+    }
+    
+    // ============================================
+    // INITIALISATION
+    // ============================================
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("✅ Dashboard chargé, initialisation...");
+        
+        // Charger les données du dashboard
+        loadDashboardData();
+        
+        // Vérifier les notifications après 2 secondes
+        setTimeout(() => {
+            checkNotifications();
+            loadRecentNotifications();
+            loadGroupedNotificationsSummary();
+        }, 2000);
+        
+        // Vérifier les notifications toutes les 30 secondes
+        setInterval(checkNotifications, 30000);
+        
+        // Rafraîchir les notifications récentes toutes les minutes
+        setInterval(loadRecentNotifications, 60000);
+        
+        // Rafraîchir le dashboard toutes les 2 minutes
+        setInterval(loadDashboardData, 120000);
+    });    
+    // Ajouter l'animation de pulsation pour le CSS
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+    `;
+    document.head.appendChild(style);
+function updateRevenueDisplay(data) {
+    const revenuCard = document.getElementById('revenuCard');
+    const normalCard = document.getElementById('normalCard');
+    const statRevenu = document.getElementById('statRevenu');
+    
+    // Vérifier si c'est un super-chauffeur
+    const isSuperChauffeur = data.chauffeur && data.chauffeur.super_chauffeur === true;
+    
+    if (isSuperChauffeur) {
+        // Afficher le revenu pour les super-chauffeurs
+        revenuCard.style.display = 'block';
+        normalCard.style.display = 'none';
+        
+        if (data.dashboard && data.dashboard.stats) {
+            const stats = data.dashboard.stats;
+            if (stats.revenu_valide_display) {
+                statRevenu.textContent = stats.revenu_valide_display;
+            } else if (stats.revenu_valide !== undefined) {
+                statRevenu.textContent = `${parseFloat(stats.revenu_valide || 0).toFixed(2)} DNT`;
+            } else {
+                statRevenu.textContent = "0.00 DNT";
+            }
+        }
+    } else {
+        // Cacher le revenu pour les chauffeurs normaux
+        revenuCard.style.display = 'none';
+        normalCard.style.display = 'block';
+        normalCard.innerHTML = `
+            <h3>Statistiques</h3>
+            <div class="value">📈</div>
+            <div style="font-size: 14px; margin-top: 10px; color: #666;">
+                ${data.dashboard?.stats?.courses_validees || 0} validées
+            </div>
+        `;
+    }
+}
+
+// Appeler cette fonction dans loadDashboardData() :
+if (data.success) {
+    // ... autres initialisations ...
+    
+    // Gérer l'affichage des revenus
+    updateRevenueDisplay(data);
+    
+    // ... suite ...
+}
+    </script>
+</body>
+</html>

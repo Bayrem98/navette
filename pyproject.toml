@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "navette"
+version = "0.1.0"
+description = "Transport management application"
+authors = ["Your Name <your.email@example.com>"]
+
+[tool.poetry.dependencies]
+python = "3.11.9"
+Django = "4.2.7"
+pandas = ">=2.0.0,<2.2.0"
+django-crispy-forms = "2.1"
+crispy-bootstrap5 = "0.7"
+djangorestframework = "3.14.0"
+django-cors-headers = "4.3.1"
+folium = "0.15.0"
+geopy = "2.4.1"
+requests = "2.31.0"
+Pillow = "10.1.0"
+python-decouple = "3.8"
+gunicorn = "20.1.0"
+whitenoise = "6.6.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

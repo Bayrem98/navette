@@ -1,0 +1,1222 @@
+{% extends 'gestion/base.html' %}
+{% load custom_filters %}
+
+{% block page_title %}Détail Paie - {{ societe_nom }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-building me-2"></i>Détail des Courses - {{ societe_nom }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Filtres -->
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="card-title mb-0"><i class="fas fa-filter"></i> Filtres</h6>
+                            </div>
+                            <div class="card-body">
+                                <form method="get" class="row g-3">
+                                    <div class="col-md-3">
+                                        <label class="form-label">Date début</label>
+                                        <input type="date" name="date_debut" class="form-control" 
+                                               value="{{ date_debut|default:aujourd_hui_mois_debut }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Date fin</label>
+                                        <input type="date" name="date_fin" class="form-control" 
+                                               value="{{ date_fin|default:aujourd_hui_mois_fin }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Type chauffeur</label>
+                                        <select name="type_chauffeur" class="form-control">
+                                            <option value="tous" {% if type_chauffeur == 'tous' %}selected{% endif %}>Tous</option>
+                                            <option value="taxi" {% if type_chauffeur == 'taxi' %}selected{% endif %}>Taxi</option>
+                                            <option value="prive" {% if type_chauffeur == 'prive' %}selected{% endif %}>Chauffeur Privé</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">&nbsp;</label>
+                                        <div>
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-filter"></i> Filtrer
+                                            </button>
+                                            <a href="{% url 'detail_societe_paie' societe_nom %}" class="btn btn-secondary">
+                                                <i class="fas fa-times"></i> Effacer
+                                            </a>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Informations de la société -->
+                {% with societe_info=societe_nom|get_societe_info %}
+<!-- Informations de la société - Version Directe -->
+{% if societe_obj %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-building"></i> Informations de la Société
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th width="40%">Nom :</th>
+                                <td><strong>{{ societe_obj.nom }}</strong></td>
+                            </tr>
+                            <tr>
+                                <th>Matricule Fiscale :</th>
+                                <td>
+                                    {% if societe_obj.matricule_fiscale %}
+                                        <code>{{ societe_obj.matricule_fiscale }}</code>
+                                    {% else %}
+                                        <span class="text-muted">Non renseigné</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Téléphone :</th>
+                                <td>{{ societe_obj.telephone|default:"-" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Email :</th>
+                                <td>{{ societe_obj.email|default:"-" }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th width="40%">Personne à contacter :</th>
+                                <td>{{ societe_obj.contact_personne|default:"-" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Date création :</th>
+                                <td>{{ societe_obj.created_at|date:"d/m/Y" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Dernière modification :</th>
+                                <td>{{ societe_obj.updated_at|date:"d/m/Y H:i" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Nombre d'agents :</th>
+                                <td>
+                                    <span class="badge bg-info">{{ societe_obj.agent_set.count }}</span>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                {% if societe_obj.adresse %}
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <strong>Adresse :</strong>
+                        <p class="mb-0">{{ societe_obj.adresse }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="row mt-3">
+                    <div class="col-12 text-end">
+                        <a href="{% url 'modifier_societe' societe_obj.id %}" class="btn btn-sm btn-warning">
+                            <i class="fas fa-edit"></i> Modifier ces informations
+                        </a>
+                        <a href="{% url 'detail_societe' societe_obj.id %}" class="btn btn-sm btn-info">
+                            <i class="fas fa-eye"></i> Voir le détail complet
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-warning">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                <div>
+                    <h6 class="alert-heading mb-1">Société non trouvée dans la base de données</h6>
+                    <p class="mb-0">
+                        La société "{{ societe_nom }}" n'existe pas dans la gestion des sociétés.<br>
+                        <a href="{% url 'societes' %}" class="alert-link">
+                            <i class="fas fa-plus"></i> Créer cette société maintenant
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+                {% endwith %}
+
+                <!-- Statistiques -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-primary text-white text-center">
+                            <div class="card-body py-3">
+                                <h4 class="card-title mb-0">{{ total_courses }}</h4>
+                                <small>Courses</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white text-center">
+                            <div class="card-body py-3">
+                                <h4 class="card-title mb-0">{{ total_affectations }}</h4>
+                                <small>Affectations</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-white text-center">
+                            <div class="card-body py-3">
+                                <h4 class="card-title mb-0">{{ prix_total }} DNT</h4>
+                                <small>Total à Payer</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white text-center">
+                            <div class="card-body py-3">
+                                <h4 class="card-title mb-0">
+                                    {% if type_chauffeur == 'tous' %}Tous{% elif type_chauffeur == 'taxi' %}Taxi{% else %}Privé{% endif %}
+                                </h4>
+                                <small>Type Chauffeur</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tableau détaillé groupé par date ET par course -->
+                <div class="card">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-list me-2"></i>Détail des Courses
+                        </h6>
+                        <a href="{% url 'paie' %}?date_debut={{ date_debut }}&date_fin={{ date_fin }}" 
+                           class="btn btn-sm btn-primary">
+                            <i class="fas fa-arrow-left me-1"></i>Retour au Rapport
+                        </a>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if affectations %}
+                            {% regroup affectations by date_reelle as affectations_par_date %}
+                            
+                            {% for date_group in affectations_par_date %}
+                            <div class="date-section mb-4">
+                                <!-- En-tête de date -->
+                                <div class="bg-secondary text-white p-2">
+                                    <h6 class="mb-0">{{ date_group.grouper|date:"d/m/Y" }}</h6>
+                                </div>
+                                
+                                <!-- Regrouper par course (chauffeur + heure + type) -->
+                                {% regroup date_group.list by course as courses_par_date %}
+                                
+                                {% for course_group in courses_par_date %}
+                                {% with course=course_group.grouper %}
+                                {% with agents_course=course_group.list %}
+                                <div class="course-section border-bottom">
+                                    <!-- En-tête de la course -->
+                                    <div class="bg-light p-2 border-bottom">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>{{ course.chauffeur.nom }}</strong> - 
+                                                {{ course.get_type_transport_display }} {{ course.heure }}H
+                                            </div>
+   <div class="col-md-6 text-end">
+    {% with prix_course_reel=course.prix_total|default:course.get_prix_course %}
+        <strong>Prix course: {{ prix_course_reel|floatformat:2 }} DNT</strong> | 
+        <strong>Prix société: {{ course|get_prix_par_societe_reel|floatformat:2 }} DNT</strong>
+        
+        {% if course.prix_total and course.prix_total > 0 %}
+            <br>
+            <small class="text-success">
+                <i class="fas fa-edit"></i> Prix personnalisé
+            </small>
+        {% else %}
+            <br>
+            <small class="text-muted">
+                <i class="fas fa-calculator"></i> Prix automatique
+            </small>
+        {% endif %}
+    {% endwith %}
+</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Agents de cette course -->
+                                    <div class="table-responsive">
+                                        <table class="table table-striped table-sm mb-0">
+                                            <thead class="table-dark">
+                                                <tr>
+                                                    <th>Salarié</th>
+                                                    <th>HEURE</th>
+                                                    <th>CHAUFFEUR</th>
+                                                    <th>SOCIETE</th>
+                                                    <th>DESTINATION</th>
+                                                    <th>ETAT</th>
+                                                    <th>PLANNING RÉEL</th>
+                                                    <th>PRIX (DNT)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for affectation in agents_course %}
+                                                <tr>
+                                                    <td class="align-middle">
+                                                        <strong>{{ affectation.agent.nom }}</strong>
+                                                    </td>
+                                                    <td class="align-middle">
+                                                        <span class="badge {% if affectation.type_transport == 'ramassage' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+                                                            {{ affectation.heure }}H
+                                                        </span>
+                                                    </td>
+                                                    <td class="align-middle">
+                                                        <strong>{{ affectation.chauffeur.nom }}</strong><br>
+                                                        <small class="text-muted">{{ affectation.chauffeur.get_type_chauffeur_display }}</small>
+                                                    </td>
+                                                    <td class="align-middle">
+                                                        <span class="badge bg-info">{{ affectation.agent.societe }}</span>
+                                                    </td>
+                                                    <td class="align-middle">
+                                                        <small>{{ affectation.agent.adresse|truncatewords:3 }}</small>
+                                                    </td>
+                                                    <td class="align-middle">
+                                                        <span class="badge {% if affectation.type_transport == 'ramassage' %}bg-success{% else %}bg-info{% endif %}">
+                                                            {{ affectation.get_type_transport_display }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="align-middle">
+                                                        <small class="text-muted">
+                                                            {{ affectation.planning_reel }}
+                                                        </small>
+                                                    </td>
+                                                    <td class="align-middle">
+                                                        {% if forloop.first %}
+                                                            <!-- Afficher le prix seulement sur la première ligne de la course -->
+                                                            <strong class="text-success" rowspan="{{ agents_course|length }}">
+                                                                {{ course|get_prix_par_societe_reel|floatformat:2 }} DNT
+                                                            </strong>
+                                                        {% else %}
+                                                            <!-- Lignes suivantes : cellule vide -->
+                                                        {% endif %}
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                {% endwith %}
+                                {% endwith %}
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
+                            
+                            <!-- Total général -->
+                            <div class="bg-light p-3 border-top">
+                                <div class="row">
+                                    <div class="col-md-12 text-end">
+                                        <h5 class="mb-0">
+                                            Total Général: <span class="text-success">{{ prix_total }} DNT</span>
+                                        </h5>
+                                        <small class="text-muted">
+                                            Prix calculé : Course Taxi (15 DNT) ÷ Nombre de sociétés dans la course
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                        {% else %}
+                            <div class="text-center py-5">
+                                <div class="text-muted">
+                                    <i class="fas fa-building fa-3x mb-3"></i>
+                                    <h5>Aucune course trouvée</h5>
+                                    <p>Aucune affectation trouvée pour la société {{ societe_nom }} avec les filtres actuels.</p>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Légende -->
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6><i class="fas fa-info-circle"></i> Méthode de calcul :</h6>
+                                <ul class="mb-0">
+                                    <li><strong>Course Taxi</strong> : 15 DNT par course</li>
+                                    <li><strong>Course Chauffeur Privé</strong> : 10 DNT par course</li>
+                                    <li><strong>Répartition</strong> : Prix de la course divisé par le nombre de sociétés dans la course</li>
+                                    <li><strong>Exemple</strong> : Course Taxi avec 2 sociétés = 15 DNT ÷ 2 = 7.5 DNT par société</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bouton d'impression -->
+              {% if affectations %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card border-primary">
+            <div class="card-header bg-gradient-primary text-white">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-print me-2"></i>Options d'Impression
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="text-center mb-3">
+                            <button class="btn btn-outline-primary btn-lg w-100 py-3" onclick="imprimerRapportStandard()">
+                                <div class="d-flex flex-column align-items-center">
+                                    <i class="fas fa-print fa-2x mb-2"></i>
+                                    <span class="fw-bold">Imprimer Standard</span>
+                                    <small class="text-muted">Format rapide</small>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center mb-3">
+                            <button class="btn btn-success btn-lg w-100 py-3" onclick="imprimerRapportComplet()">
+                                <div class="d-flex flex-column align-items-center">
+                                    <i class="fas fa-file-alt fa-2x mb-2"></i>
+                                    <span class="fw-bold">Rapport Complet</span>
+                                    <small class="text-muted">Avec tous les détails</small>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center mb-3">
+                            <button class="btn btn-danger btn-lg w-100 py-3" onclick="imprimerRapportFacture()">
+                                <div class="d-flex flex-column align-items-center">
+                                    <i class="fas fa-file-invoice-dollar fa-2x mb-2"></i>
+                                    <span class="fw-bold">Facture Pro</span>
+                                    <small class="text-muted">Format facturation</small>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="alert alert-info">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-info-circle fa-2x me-3"></i>
+                                <div>
+                                    <h6 class="alert-heading mb-1">Conseils d'impression</h6>
+                                    <p class="mb-0">
+                                        • <strong>Standard</strong> : Pour un aperçu rapide<br>
+                                        • <strong>Complet</strong> : Inclut tous les détails et statistiques<br>
+                                        • <strong>Facture Pro</strong> : Format professionnel avec en-tête et pied de page
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+// Fonction pour imprimer le rapport standard
+function imprimerRapportStandard() {
+    showPrintNotification('standard');
+    
+    const printContent = document.querySelector('.impression-optimise').outerHTML;
+    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Rapport Transport - ${document.title}</title>
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; color: #333; }
+                @media print {
+                    @page { margin: 0.5cm; size: A4 portrait; }
+                    body { margin: 1cm; }
+                }
+                .header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #2c3e50; }
+                .header h1 { color: #2c3e50; margin-bottom: 10px; }
+                .header .subtitle { color: #7f8c8d; font-size: 14px; }
+                .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                .info-table th, .info-table td { padding: 8px; border: 1px solid #ddd; text-align: left; }
+                .info-table th { background-color: #f8f9fa; font-weight: 600; }
+                .statistics { display: flex; justify-content: space-around; margin: 20px 0; }
+                .stat-box { text-align: center; padding: 15px; border-radius: 5px; }
+                .stat-box h3 { margin: 0; font-size: 24px; }
+                .stat-box p { margin: 5px 0 0 0; font-size: 12px; }
+                .course-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                .course-table th, .course-table td { padding: 8px; border: 1px solid #ddd; }
+                .course-table th { background-color: #2c3e50; color: white; }
+                .total-section { text-align: right; margin-top: 30px; padding-top: 20px; border-top: 2px solid #2c3e50; }
+                .total-section h3 { color: #27ae60; }
+                .signature { margin-top: 50px; text-align: right; }
+                .footer { text-align: center; margin-top: 30px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 10px; color: #7f8c8d; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>RAPPORT DE TRANSPORT</h1>
+                <div class="subtitle">Document généré le ${new Date().toLocaleDateString('fr-FR')}</div>
+            </div>
+            ${printContent}
+            <div class="footer">
+                Document généré par le Système de Gestion Transport | Page 1/1
+            </div>
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 1000);
+}
+
+// Fonction pour imprimer le rapport complet
+function imprimerRapportComplet() {
+    showPrintNotification('complet');
+    
+    const printContent = document.querySelector('.impression-optimise').outerHTML;
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Rapport Complet - ${document.title}</title>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+            <style>
+                @media print {
+                    @page {
+                        margin: 1cm;
+                        size: A4 portrait;
+                    }
+                    body {
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        margin: 0;
+                        padding: 0;
+                        color: #333;
+                    }
+                    .print-container {
+                        background: white;
+                        padding: 30px;
+                    }
+                }
+                body {
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    margin: 20px;
+                    background: #f5f5f5;
+                }
+                .print-container {
+                    background: white;
+                    padding: 30px;
+                    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+                    border-radius: 10px;
+                    max-width: 21cm;
+                    margin: 0 auto;
+                }
+                .header-section {
+                    text-align: center;
+                    padding: 20px 0;
+                    border-bottom: 3px solid #3498db;
+                }
+                .company-logo {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin-bottom: 10px;
+                }
+                .logo-icon {
+                    width: 50px;
+                    height: 50px;
+                    background: linear-gradient(135deg, #3498db, #2c3e50);
+                    border-radius: 10px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin-right: 15px;
+                }
+                .logo-text {
+                    text-align: left;
+                }
+                .info-card {
+                    background: white;
+                    padding: 15px;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    margin-bottom: 20px;
+                }
+                .signature-area {
+                    margin-top: 50px;
+                    padding-top: 20px;
+                    border-top: 2px solid #ddd;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="print-container">
+                <!-- En-tête professionnel -->
+                <div class="header-section">
+                    <div class="company-logo">
+                        <div class="logo-icon">
+                            <span style="color: white; font-weight: bold; font-size: 18px;">GT</span>
+                        </div>
+                        <div class="logo-text">
+                            <h1 style="margin: 0; color: #2c3e50; font-size: 28px;">GESTION TRANSPORT</h1>
+                            <p style="margin: 0; color: #7f8c8d; font-size: 14px;">Rapport détaillé de transport</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Informations société -->
+                <div style="margin: 30px 0; padding: 20px; background: linear-gradient(to right, #f8f9fa, #ffffff); border-radius: 10px; border-left: 5px solid #3498db;">
+                    <h2 style="color: #2c3e50; margin-bottom: 20px; display: flex; align-items: center;">
+                        <i class="fas fa-building" style="margin-right: 10px;"></i>
+                        Société : {{ societe_nom }}
+                    </h2>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                        <div class="info-card">
+                            <h3 style="color: #3498db; margin-bottom: 10px; font-size: 16px;">
+                                <i class="fas fa-info-circle"></i> Informations
+                            </h3>
+                            <table style="width: 100%;">
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600; width: 40%;">Nom :</td>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #eee;">{{ societe_obj.nom|default:societe_nom }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">Matricule :</td>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #eee;">{{ societe_obj.matricule_fiscale|default:"Non renseigné" }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">Contact :</td>
+                                    <td style="padding: 8px 0; border-bottom: 1px solid #eee;">{{ societe_obj.contact_personne|default:"Non renseigné" }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        
+                        <div class="info-card">
+                            <h3 style="color: #3498db; margin-bottom: 10px; font-size: 16px;">
+                                <i class="fas fa-chart-bar"></i> Statistiques
+                            </h3>
+                            <div style="display: flex; justify-content: space-around; text-align: center;">
+                                <div>
+                                    <div style="font-size: 24px; font-weight: bold; color: #3498db;">{{ total_courses }}</div>
+                                    <div style="font-size: 12px; color: #7f8c8d;">Courses</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 24px; font-weight: bold; color: #e74c3c;">{{ total_affectations }}</div>
+                                    <div style="font-size: 12px; color: #7f8c8d;">Affectations</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 24px; font-weight: bold; color: #2ecc71;">{{ prix_total }} DNT</div>
+                                    <div style="font-size: 12px; color: #7f8c8d;">Montant total</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contenu principal -->
+                ${printContent}
+
+                <!-- Signature et cachet -->
+                <div class="signature-area">
+                    <div style="display: flex; justify-content: space-between;">
+                        <div>
+                            <p style="margin: 0; font-size: 12px; color: #7f8c8d;">
+                                Document certifié conforme<br>
+                                N° de référence: ${new Date().getTime()}
+                            </p>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="margin-bottom: 10px; font-size: 12px; color: #7f8c8d;">
+                                Fait à Tunis, le ${new Date().toLocaleDateString('fr-FR')}
+                            </div>
+                            <div style="border-top: 1px solid #000; width: 200px; padding-top: 5px;">
+                                Signature et cachet
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pied de page -->
+                <div style="margin-top: 30px; padding: 10px; background: #f8f9fa; border-radius: 5px; text-align: center; font-size: 10px; color: #7f8c8d;">
+                    <p style="margin: 0;">
+                        Gestion Transport • 
+                        Tél: +216 XX XXX XXX • 
+                        Email: contact@transport.tn • 
+                        Page 1/1
+                    </p>
+                    <p style="margin: 5px 0 0 0;">
+                        Ce document est généré automatiquement et ne nécessite pas de signature manuscrite
+                    </p>
+                </div>
+            </div>
+            
+            <script>
+                window.onload = function() {
+                    setTimeout(function() {
+                        window.print();
+                    }, 1000);
+                };
+            <\/script>
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+}
+
+// Fonction pour imprimer le rapport facture (format professionnel)
+function imprimerRapportFacture() {
+    showPrintNotification('facture');
+    
+    const printContent = document.querySelector('.impression-optimise').outerHTML;
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Facture Transport - {{ societe_nom }}</title>
+            <style>
+                @page {
+                    margin: 2cm;
+                    size: A4 portrait;
+                }
+                body {
+                    font-family: 'Helvetica Neue', Arial, sans-serif;
+                    margin: 0;
+                    padding: 0;
+                    color: #333;
+                    background: white;
+                }
+                .invoice-container {
+                    max-width: 21cm;
+                    margin: 0 auto;
+                    padding: 20px;
+                }
+                .invoice-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    padding-bottom: 20px;
+                    border-bottom: 3px solid #2c3e50;
+                    margin-bottom: 30px;
+                }
+                .company-info {
+                    flex: 1;
+                }
+                .company-info h1 {
+                    color: #2c3e50;
+                    margin: 0 0 10px 0;
+                    font-size: 28px;
+                }
+                .company-info p {
+                    margin: 5px 0;
+                    color: #7f8c8d;
+                    font-size: 12px;
+                }
+                .invoice-title {
+                    text-align: right;
+                }
+                .invoice-title h2 {
+                    color: #e74c3c;
+                    margin: 0;
+                    font-size: 32px;
+                }
+                .invoice-title .invoice-number {
+                    color: #7f8c8d;
+                    font-size: 14px;
+                }
+                .client-info {
+                    background: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 30px;
+                }
+                .client-info h3 {
+                    color: #2c3e50;
+                    margin-top: 0;
+                }
+                .details-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 30px 0;
+                }
+                .details-table th {
+                    background: #2c3e50;
+                    color: white;
+                    padding: 12px;
+                    text-align: left;
+                    font-weight: 600;
+                }
+                .details-table td {
+                    padding: 10px;
+                    border-bottom: 1px solid #ddd;
+                }
+                .details-table tr:nth-child(even) {
+                    background: #f8f9fa;
+                }
+                .total-section {
+                    text-align: right;
+                    margin-top: 40px;
+                    padding-top: 20px;
+                    border-top: 2px solid #2c3e50;
+                }
+                .total-amount {
+                    font-size: 24px;
+                    color: #27ae60;
+                    font-weight: bold;
+                }
+                .payment-info {
+                    background: #ecf0f1;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin-top: 20px;
+                    font-size: 12px;
+                }
+                .signature-area {
+                    margin-top: 60px;
+                    display: flex;
+                    justify-content: space-between;
+                }
+                .stamp {
+                    width: 150px;
+                    height: 150px;
+                    border: 2px dashed #ccc;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 12px;
+                    color: #7f8c8d;
+                }
+                .footer-note {
+                    text-align: center;
+                    margin-top: 50px;
+                    padding-top: 20px;
+                    border-top: 1px solid #ddd;
+                    font-size: 10px;
+                    color: #7f8c8d;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="invoice-container">
+                <div class="invoice-header">
+                    <div class="company-info">
+                        <h1>GESTION TRANSPORT</h1>
+                        <p>123 Avenue de la Liberté, Tunis 1002</p>
+                        <p>Tél: +216 70 123 456 | Email: facturation@transport.tn</p>
+                        <p>Matricule fiscale: MF123456789</p>
+                    </div>
+                    <div class="invoice-title">
+                        <h2>FACTURE</h2>
+                        <div class="invoice-number">
+                            N° FACT-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}
+                        </div>
+                        <div style="margin-top: 10px; font-size: 14px;">
+                            Date: ${new Date().toLocaleDateString('fr-FR')}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="client-info">
+                    <h3>Client</h3>
+                    <p><strong>{{ societe_nom }}</strong></p>
+                    <p>Période: {{ date_debut|default:"Toutes dates" }} au {{ date_fin|default:"Toutes dates" }}</p>
+                    <p>Type de document: Rapport détaillé de services de transport</p>
+                </div>
+                
+                <!-- Contenu du rapport -->
+                ${printContent}
+                
+                <div class="total-section">
+                    <div class="total-amount">
+                        MONTANT TOTAL: {{ prix_total|floatformat:2 }} DNT
+                    </div>
+                    <div class="payment-info">
+                        <strong>Modalités de paiement:</strong> Paiement à 30 jours fin de mois<br>
+                        <strong>IBAN:</strong> TN59 1234 5678 9012 3456 7890<br>
+                        <strong>Banque:</strong> Banque de Tunisie - Agence Centre Ville
+                    </div>
+                </div>
+                
+                <div class="signature-area">
+                    <div>
+                        <p>Pour accord,</p>
+                        <div style="margin-top: 40px;">
+                            <p>Signature du client:</p>
+                            <div style="border-bottom: 1px solid #000; width: 200px; margin-top: 30px;"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <p>Le Responsable,</p>
+                        <div style="margin-top: 40px;">
+                            <div class="stamp">
+                                <div style="text-align: center;">
+                                    <strong>CACHET</strong><br>
+                                    SERVICE TRANSPORT
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="footer-note">
+                    <p>Merci pour votre confiance. Pour toute question, contactez-nous au +216 70 123 456</p>
+                    <p>Document généré automatiquement - Valide sans signature</p>
+                </div>
+            </div>
+            
+            <script>
+                window.onload = function() {
+                    setTimeout(function() {
+                        window.print();
+                    }, 1000);
+                };
+            <\/script>
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+}
+
+// Ajouter une notification élégante
+function showPrintNotification(type) {
+    const notifications = {
+        standard: "📄 Impression du rapport standard lancée...",
+        complet: "📊 Génération du rapport complet en cours...",
+        facture: "💰 Création de la facture professionnelle..."
+    };
+    
+    // Créer une notification toast
+    const toast = document.createElement('div');
+    toast.className = 'position-fixed top-0 end-0 p-3';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-primary text-white">
+                <i class="fas fa-print me-2"></i>
+                <strong class="me-auto">Impression</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                ${notifications[type]}
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Supprimer après 3 secondes
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+// Ajouter des tooltips aux boutons
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialiser les tooltips Bootstrap
+    if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+    
+    // Ajouter des attributs title pour les tooltips
+    const buttons = document.querySelectorAll('.btn-outline-primary, .btn-success, .btn-danger');
+    const tooltips = [
+        'Format rapide pour vérification interne',
+        'Rapport détaillé avec toutes les informations',
+        'Format professionnel pour facturation client'
+    ];
+    
+    buttons.forEach((btn, index) => {
+        if (index < 3) {
+            btn.setAttribute('title', tooltips[index]);
+            btn.setAttribute('data-bs-toggle', 'tooltip');
+            btn.setAttribute('data-bs-placement', 'top');
+        }
+    });
+});
+</script>
+<!-- SECTION IMPRESSION OPTIMISÉE -->
+<div class="impression-optimise d-none d-print-block">
+    <!-- En-tête principal -->
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h2 style="margin: 5px 0; color: #000;">RAPPORT DÉTAILLÉ DE TRANSPORT</h2>
+    </div>
+
+    <!-- Informations société -->
+    <div style="margin-bottom: 20px;">
+        <h3 style="margin: 10px 0; color: #2c3e50;">Société : {{ societe_nom }}</h3>
+        <div style="font-size: 11px; color: #7f8c8d; margin-bottom: 15px;">
+            Période : {% if date_debut %}{{ date_debut }} - {{ date_fin }}{% else %}Toute période{% endif %} | 
+            Type : {% if type_chauffeur == 'tous' %}Tous{% elif type_chauffeur == 'taxi' %}Taxi{% else %}Chauffeur Privé{% endif %}
+        </div>
+
+        <!-- Tableau des informations société -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 11px;">
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; width: 20%; background: #f8f9fa;">Nom Société</td>
+                <td style="padding: 8px; border: 1px solid #ddd; width: 30%;">{{ societe_obj.nom|default:societe_nom }}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; width: 20%;"></td>
+                <td style="padding: 8px; border: 1px solid #ddd; width: 30%;"></td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; background: #f8f9fa;">Matricule Fiscale</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{{ societe_obj.matricule_fiscale|default:"Non renseigné" }}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; background: #f8f9fa;">Téléphone</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{{ societe_obj.telephone|default:"Non renseigné" }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; background: #f8f9fa;">Adresse</td>
+                <td colspan="3" style="padding: 8px; border: 1px solid #ddd;">{{ societe_obj.adresse|default:"Adresse non renseignée" }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; background: #f8f9fa;">Email</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{{ societe_obj.email|default:"Non renseigné" }}</td>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; background: #f8f9fa;">Contact</td>
+                <td style="padding: 8px; border: 1px solid #ddd;">{{ societe_obj.contact_personne|default:"Non renseigné" }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <hr style="border: none; border-top: 2px solid #000; margin: 20px 0;">
+
+    <!-- Statistiques -->
+    <div style="margin-bottom: 20px;">
+        <h4 style="margin: 15px 0 10px 0; color: #2c3e50;">Statistiques</h4>
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+            <tr>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: left; background: #f8f9fa; width: 70%;"></th>
+                <th style="padding: 8px; border: 1px solid #ddd; text-align: center; background: #f8f9fa; width: 30%;">Valeur</th>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Nombre de courses</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{ total_courses }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Nombre d'affectations</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{ total_affectations }}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Montant total</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #27ae60;">
+                    {{ prix_total|floatformat:2 }} DNT
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <hr style="border: none; border-top: 1px solid #ccc; margin: 20px 0;">
+
+    <!-- Détail par date -->
+    {% regroup affectations by date_reelle as affectations_par_date %}
+    {% if affectations_par_date %}
+        {% for date_group in affectations_par_date %}
+        <div style="margin-bottom: 25px; page-break-inside: avoid;">
+            <h4 style="margin: 15px 0 10px 0; color: #2c3e50; background: #ecf0f1; padding: 5px 10px;">
+                {{ date_group.grouper|date:"d/m/Y" }}
+            </h4>
+            
+            <!-- Regrouper par course -->
+            {% regroup date_group.list by course as courses_par_date %}
+            {% for course_group in courses_par_date %}
+            {% with course=course_group.grouper %}
+            
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 10px;">
+                <thead>
+                    <tr>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: center; background: #34495e; color: white; width: 5%;">#</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left; background: #34495e; color: white; width: 20%;">Salarié</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: center; background: #34495e; color: white; width: 10%;">Type</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left; background: #34495e; color: white; width: 25%;">Adresse</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left; background: #34495e; color: white; width: 15%;">Planning</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: left; background: #34495e; color: white; width: 15%;">Chauffeur</th>
+                        <th style="padding: 8px; border: 1px solid #ddd; text-align: right; background: #34495e; color: white; width: 10%;">Montant Société</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for affectation in course_group.list %}
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">{{ forloop.counter }}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">{{ affectation.agent.nom }}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: {% if affectation.type_transport == 'ramassage' %}#27ae60{% else %}#e74c3c{% endif %};">
+                            {{ affectation.get_type_transport_display }}
+                        </td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">{{ affectation.agent.adresse|truncatewords:4 }}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">{{ affectation.planning_reel|default:"-" }}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">{{ affectation.chauffeur.nom }}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; text-align: right; font-weight: bold; color: #27ae60;">
+                            {% if forloop.first %}
+                                {{ course|get_prix_par_societe_reel|floatformat:2 }} DNT
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% endwith %}
+            {% endfor %}
+        </div>
+        
+        {% if not forloop.last %}
+        <hr style="border: none; border-top: 1px dashed #ccc; margin: 20px 0;">
+        {% endif %}
+        
+        {% endfor %}
+    {% else %}
+        <div style="text-align: center; padding: 20px; color: #7f8c8d; font-style: italic;">
+            Aucune course trouvée pour cette société avec les filtres actuels
+        </div>
+    {% endif %}
+
+    <!-- Total général -->
+    <div style="margin: 30px 0; padding: 15px; background: #2ecc71; color: white; text-align: right; border-radius: 4px;">
+        <h3 style="margin: 0;">TOTAL À PAYER : {{ prix_total|floatformat:2 }} DNT</h3>
+    </div>
+
+    <!-- Zone de signature -->
+    <div style="margin-top: 50px; text-align: right;">
+        <div style="font-size: 11px; margin-bottom: 5px;">Fait à Tunis, le {% now "d/m/Y" %}</div>
+        <div style="border-top: 1px solid #000; width: 200px; margin-left: auto; padding-top: 5px; text-align: center;">
+            Signature et cachet
+        </div>
+    </div>
+
+    <!-- Pied de page -->
+    <div style="text-align: center; margin-top: 40px; padding-top: 10px; border-top: 1px solid #ccc; font-size: 9px; color: #7f8c8d;">
+        Document généré le {% now "d/m/Y à H:i" %} | Système de Gestion Transport - Page 1/1
+    </div>
+</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.btn-outline-primary:hover {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,123,255,0.3);
+    transition: all 0.3s ease;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #28a745, #1e7e34);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(40,167,69,0.3);
+    transition: all 0.3s ease;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(220,53,69,0.3);
+    transition: all 0.3s ease;
+}
+
+/* Animation au clic */
+@keyframes printClick {
+    0% { transform: scale(1); }
+    50% { transform: scale(0.95); }
+    100% { transform: scale(1); }
+}
+
+.btn-outline-primary:active,
+.btn-success:active,
+.btn-danger:active {
+    animation: printClick 0.2s ease;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .btn-lg {
+        padding: 15px 10px !important;
+    }
+    .btn-lg i {
+        font-size: 1.5rem !important;
+    }
+}
+.tooltip {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Effet de loading sur les boutons pendant l'impression */
+.btn-printing {
+    position: relative;
+    pointer-events: none;
+}
+
+.btn-printing::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    top: 50%;
+    left: 50%;
+    margin: -10px 0 0 -10px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top: 2px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Effet de pulse sur les boutons au survol */
+.btn-outline-primary:hover, 
+.btn-success:hover, 
+.btn-danger:hover {
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(0, 123, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 123, 255, 0); }
+}
+</style>
+{% endblock %}

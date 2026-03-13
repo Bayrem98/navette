@@ -1,0 +1,55 @@
+{% extends 'gestion/base.html' %}
+
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">📋 Courses en attente de validation</h2>
+    
+    {% if courses %}
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Chauffeur</th>
+                    <th>Date</th>
+                    <th>Heure</th>
+                    <th>Type</th>
+                    <th>Nb agents</th>
+                    <th>Prix</th>
+                    <th>Demandé le</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for course in courses %}
+                <tr>
+                    <td>{{ course.chauffeur.nom }}</td>
+                    <td>{{ course.date_reelle|date:"d/m/Y" }}</td>
+                    <td>{{ course.heure }}h</td>
+                    <td>{{ course.get_type_transport_display }}</td>
+                    <td>{{ course.affectation_set.count }}</td>
+                    <td>{{ course.get_prix_course }} €</td>
+                    <td>{{ course.demande_validation_at|date:"d/m/Y H:i" }}</td>
+                    <td>
+                        <form method="post" action="{% url 'valider_course_admin' course.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success btn-sm">✅ Valider</button>
+                        </form>
+                        <form method="post" action="{% url 'refuser_course_admin' course.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger btn-sm">❌ Refuser</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        Aucune course en attente de validation.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

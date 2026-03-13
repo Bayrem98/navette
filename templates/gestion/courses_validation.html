@@ -1,0 +1,93 @@
+{% extends 'gestion/base.html' %}
+
+{% block page_title %}courses_validation.html{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-warning text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-clock"></i> Courses en attente de validation ({{ courses|length }})
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if courses %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-warning">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Date</th>
+                                    <th>Chauffeur</th>
+                                    <th>Type</th>
+                                    <th>Heure</th>
+                                    <th>Agents</th>
+                                    <th>Prix</th>
+                                    <th>Demandée le</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for course in courses %}
+                                <tr>
+                                    <td>{{ course.id }}</td>
+                                    <td>{{ course.date_reelle|date:"d/m/Y" }}</td>
+                                    <td>{{ course.chauffeur.nom }}</td>
+                                    <td>
+                                        <span class="badge {% if course.type_transport == 'ramassage' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+                                            {{ course.get_type_transport_display }}
+                                        </span>
+                                    </td>
+                                    <td>{{ course.heure }}h</td>
+                                    <td>
+                                        <span class="badge bg-info">{{ course.affectation_set.count }}</span>
+                                    </td>
+                                    <td><strong>{{ course.prix_total }} DNT</strong></td>
+                                    <td>
+                                        <small>{{ course.demande_validation_at|date:"d/m/Y H:i" }}</small>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <form method="post" action="{% url 'valider_course_admin' course.id %}" style="display:inline;">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="notes" value="Validé via admin">
+                                                <button type="submit" class="btn btn-success" 
+                                                        onclick="return confirm('Valider cette course ?')">
+                                                    <i class="fas fa-check"></i> Valider
+                                                </button>
+                                            </form>
+                                            
+                                            <form method="post" action="{% url 'refuser_course_admin' course.id %}" style="display:inline;">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="notes" value="Refusé via admin">
+                                                <button type="submit" class="btn btn-danger" 
+                                                        onclick="return confirm('Refuser cette course ?')">
+                                                    <i class="fas fa-times"></i> Refuser
+                                                </button>
+                                            </form>
+                                            
+                                            <a href="{% url 'chauffeurs' %}" class="btn btn-info" 
+                                               onclick="afficherCourseSurCarte({{ course.id }}); return false;">
+                                                <i class="fas fa-map-marked-alt"></i> Carte
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <div class="text-muted">
+                            <i class="fas fa-check-circle fa-3x mb-3"></i>
+                            <h5>Aucune course en attente de validation</h5>
+                            <p>Toutes les courses ont été traitées.</p>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

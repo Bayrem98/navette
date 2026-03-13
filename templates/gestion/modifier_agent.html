@@ -1,0 +1,416 @@
+{% extends 'gestion/base.html' %}
+
+{% block page_title %}Modifier Agent - {{ agent.nom }}{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ========== GESTION DU CHAMP SOCIÉTÉ ==========
+    const societeSelect = document.getElementById('id_societe_select');
+    const societeTexte = document.getElementById('id_societe_texte');
+    
+    if (societeSelect && societeTexte) {
+        // Synchroniser les champs société
+        societeSelect.addEventListener('change', function() {
+            if (this.value) {
+                societeTexte.disabled = true;
+                societeTexte.value = '';
+            } else {
+                societeTexte.disabled = false;
+            }
+        });
+        
+        societeTexte.addEventListener('input', function() {
+            if (this.value.trim()) {
+                societeSelect.value = '';
+            }
+        });
+        
+        // Initialiser l'état basé sur les données actuelles
+        if (societeSelect.value) {
+            societeTexte.disabled = true;
+        }
+    }
+    
+    // ========== AJAX POUR CHARGER LES SOCIÉTÉS ==========
+    chargerSocietes();
+    
+    // ========== VALIDATION DU FORMULAIRE ==========
+    const form = document.getElementById('form-modifier-agent');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const societeSelect = document.getElementById('id_societe_select');
+            const societeTexte = document.getElementById('id_societe_texte');
+            
+            // Vérifier qu'au moins un champ société est rempli
+            if (!societeSelect.value && !societeTexte.value.trim()) {
+                e.preventDefault();
+                alert('Vous devez sélectionner une société existante ou en créer une nouvelle.');
+                return false;
+            }
+            
+            // Vérifier les autres champs obligatoires
+            const nom = document.getElementById('id_nom').value.trim();
+            const telephone = document.getElementById('id_telephone').value.trim();
+            const adresse = document.getElementById('id_adresse').value.trim();
+            
+            if (!nom || !telephone || !adresse) {
+                e.preventDefault();
+                alert('Veuillez remplir tous les champs obligatoires (*).');
+                return false;
+            }
+            
+            return true;
+        });
+    }
+});
+
+// Fonction pour charger les sociétés
+function chargerSocietes() {
+    fetch('/societes/api/liste/')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('id_societe_select');
+            if (select) {
+                const options = Array.from(select.options);
+                const currentValue = select.value;
+                
+                // Garder seulement l'option "Sélectionner"
+                select.innerHTML = '<option value="">Sélectionner une société existante</option>';
+                
+                // Ajouter toutes les sociétés
+                data.forEach(societe => {
+                    const option = document.createElement('option');
+                    option.value = societe.id;
+                    option.textContent = societe.nom;
+                    select.appendChild(option);
+                });
+                
+                // Restaurer la valeur sélectionnée
+                select.value = currentValue;
+                
+                // Si une société est sélectionnée, désactiver le champ texte
+                if (currentValue) {
+                    document.getElementById('id_societe_texte').disabled = true;
+                }
+            }
+        })
+        .catch(error => console.error('Erreur:', error));
+}
+
+// Fonction pour ajouter rapidement une société
+function ajouterSocieteRapide() {
+    const nomSociete = prompt('Entrez le nom de la nouvelle société:');
+    if (nomSociete && nomSociete.trim()) {
+        fetch('/societes/api/ajouter_rapide/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({ nom: nomSociete.trim() })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Société ajoutée avec succès!');
+                // Mettre à jour la liste des sociétés
+                chargerSocietes();
+                // Sélectionner la nouvelle société
+                setTimeout(() => {
+                    const select = document.getElementById('id_societe_select');
+                    if (select) {
+                        const nouvelleOption = Array.from(select.options).find(opt => opt.text === nomSociete.trim());
+                        if (nouvelleOption) {
+                            select.value = nouvelleOption.value;
+                            document.getElementById('id_societe_texte').disabled = true;
+                            document.getElementById('id_societe_texte').value = '';
+                        }
+                    }
+                }, 500);
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('Une erreur est survenue');
+        });
+    }
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-warning text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-edit"></i> Modifier l'Agent : {{ agent.nom }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post" id="form-modifier-agent">
+                    {% csrf_token %}
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Nom complet *</label>
+                                {{ form.nom }}
+                                <small class="form-text text-muted">Le nom ne peut pas être modifié</small>
+                                {% if form.nom.errors %}
+                                <div class="text-danger">{{ form.nom.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Téléphone *</label>
+                                {{ form.telephone }}
+                                {% if form.telephone.errors %}
+                                <div class="text-danger">{{ form.telephone.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Société *</label>
+                                <div class="mb-2">
+                                    <select id="id_societe_select" name="societe_select" class="form-control">
+                                        <option value="">Sélectionner une société existante</option>
+                                        {% for societe in societes_list %}
+                                        <option value="{{ societe.id }}" 
+                                                {% if agent.societe and agent.societe.id == societe.id %}selected{% endif %}>
+                                            {{ societe.nom }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="input-group mb-3">
+                                    <span class="input-group-text">Ou créer</span>
+                                    <input type="text" id="id_societe_texte" name="societe_texte" 
+                                           class="form-control" 
+                                           placeholder="Nouvelle société"
+                                           value="{% if not agent.societe and agent.societe_texte %}{{ agent.societe_texte }}{% endif %}"
+                                           {% if agent.societe %}disabled{% endif %}>
+                                    <button type="button" class="btn btn-info" onclick="ajouterSocieteRapide()">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                                {% if form.societe_select.errors or form.societe_texte.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.societe_select.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                    {% for error in form.societe_texte.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Adresse *</label>
+                                {{ form.adresse }}
+                                {% if form.adresse.errors %}
+                                <div class="text-danger">{{ form.adresse.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <div class="form-check form-switch mt-4">
+                                    {{ form.voiture_personnelle }}
+                                    <label class="form-check-label fw-bold" for="{{ form.voiture_personnelle.id_for_label }}">
+                                        Voiture personnelle
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">
+                                    Si coché, l'agent sera exclu des transports
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <button type="submit" class="btn btn-warning me-md-2">
+                            <i class="fas fa-save"></i> Enregistrer les modifications
+                        </button>
+                        <a href="{% url 'agents' %}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Retour à la liste
+                        </a>
+                    </div>
+                </form>
+                
+                <hr class="my-4">
+                
+                <!-- Informations sur l'agent -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6><i class="fas fa-info-circle"></i> Informations actuelles :</h6>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <strong>Nom:</strong> {{ agent.nom }}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Société:</strong> 
+                                        {% if agent.societe %}
+                                            <span class="badge bg-info">{{ agent.societe.nom }}</span>
+                                        {% elif agent.societe_texte %}
+                                            <span class="badge bg-secondary">{{ agent.societe_texte }}</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Non spécifié</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Téléphone:</strong> {{ agent.telephone }}
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-12">
+                                        <strong>Adresse:</strong> {{ agent.adresse }}
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-6">
+                                        <strong>Voiture personnelle:</strong> 
+                                        {% if agent.voiture_personnelle %}
+                                            <span class="badge bg-success">Oui</span> - Exclu des transports
+                                        {% else %}
+                                            <span class="badge bg-secondary">Non</span> - Inclus dans les transports
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Statut informations:</strong> 
+                                        {% if agent.est_complet %}
+                                            <span class="badge bg-success">Complet</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">Incomplet</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Styles pour le formulaire */
+.form-label.fw-bold {
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #ffc107;
+    box-shadow: 0 0 0 0.25rem rgba(255, 193, 7, 0.25);
+}
+
+/* Styles pour les badges */
+.badge.bg-info {
+    background: linear-gradient(135deg, #17a2b8, #138496) !important;
+    color: white !important;
+    font-weight: 600;
+}
+
+.badge.bg-secondary {
+    background: linear-gradient(135deg, #6c757d, #545b62) !important;
+    color: white !important;
+    font-weight: 600;
+}
+
+.badge.bg-danger {
+    background: linear-gradient(135deg, #dc3545, #c82333) !important;
+    color: white !important;
+    font-weight: 600;
+}
+
+.badge.bg-success {
+    background: linear-gradient(135deg, #28a745, #218838) !important;
+    color: white !important;
+    font-weight: 600;
+}
+
+.badge.bg-warning {
+    background: linear-gradient(135deg, #ffc107, #e0a800) !important;
+    color: #000 !important;
+    font-weight: 600;
+}
+
+/* Styles pour le bouton ajouter société */
+.btn-info {
+    background: linear-gradient(135deg, #17a2b8, #138496);
+    border: none;
+    color: white;
+    font-weight: 600;
+}
+
+.btn-info:hover {
+    background: linear-gradient(135deg, #138496, #117a8b);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(23, 162, 184, 0.3);
+}
+
+/* Animation */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+    animation: fadeIn 0.5s ease;
+}
+
+/* Style pour le champ société désactivé */
+#id_societe_texte:disabled {
+    background-color: #e9ecef;
+    color: #6c757d;
+    cursor: not-allowed;
+}
+
+/* Bouton de soumission */
+.btn-warning {
+    background: linear-gradient(135deg, #ffc107, #e0a800);
+    border: none;
+    color: #212529;
+    font-weight: 600;
+}
+
+.btn-warning:hover {
+    background: linear-gradient(135deg, #e0a800, #d39e00);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .form-label.fw-bold {
+        font-size: 0.9rem;
+    }
+    
+    .badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,232 @@
+{% extends 'gestion/base.html' %}
+{% load custom_filters %}
+
+{% block page_title %}Rapport Paie{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0"><i class="fas fa-money-bill"></i> Rapport de Paie</h5>
+            </div>
+            <div class="card-body">
+                <!-- Filtre par date -->
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="card-title mb-0"><i class="fas fa-filter"></i> Filtre par Date</h6>
+                            </div>
+                            <div class="card-body">
+                                <form method="get" class="row g-3">
+                                    <div class="col-md-3">
+                                        <label class="form-label">Date début</label>
+                                        <input type="date" name="date_debut" class="form-control" 
+                                               value="{{ date_debut|default:aujourd_hui_mois_debut }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Date fin</label>
+                                        <input type="date" name="date_fin" class="form-control" 
+                                               value="{{ date_fin|default:aujourd_hui_mois_fin }}">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">&nbsp;</label>
+                                        <div>
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-filter"></i> Filtrer
+                                            </button>
+                                            <a href="{% url 'paie' %}" class="btn btn-secondary">
+                                                <i class="fas fa-times"></i> Effacer
+                                            </a>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistiques générales -->
+                <div class="row mb-4">
+                    <div class="col-md-2">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h4 class="card-title">{{ total_courses }}</h4>
+                                <p class="card-text">Courses Total</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card bg-warning text-white">
+                            <div class="card-body text-center">
+                                <h4 class="card-title">{{ total_affectations }}</h4>
+                                <p class="card-text">Affectations</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card bg-danger text-white">
+                            <div class="card-body text-center">
+                                <h4 class="card-title">{{ total_taxi|floatformat:1 }} DNT</h4>
+                                <p class="card-text">Total Taxi</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h4 class="card-title">{{ total_prive|floatformat:1 }} DNT</h4>
+                                <p class="card-text">Total Privé</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card bg-info text-white">
+                            <div class="card-body text-center">
+                                <h4 class="card-title">{{ total_a_payer|floatformat:1 }} DNT</h4>
+                                <p class="card-text">Total Général</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COURSES TAXI -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-danger text-white">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-taxi"></i> Courses Taxi (15DNT par course)
+                                    <span class="badge bg-light text-dark ms-2">{{ stats_taxi|length }} sociétés</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                {% if stats_taxi %}
+                                    <div class="table-responsive">
+                                        <table class="table table-striped table-hover">
+                                            <thead class="table-danger">
+                                                <tr>
+                                                    <th>Société</th>
+                                                    <th>Nombre de Courses</th>
+                                                    <th>Prix Total (DNT)</th>
+                                                    <th>Agents Transportés</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for stat in stats_taxi %}
+                                                <tr>
+                                                    <td>
+                                                        <a href="{% url 'detail_societe_paie' stat.societe %}?date_debut={{ date_debut }}&date_fin={{ date_fin }}&type_chauffeur=taxi" 
+                                                           class="text-decoration-none fw-bold" title="Voir le détail">
+                                                            {{ stat.societe }}
+                                                        </a>
+                                                    </td>
+                                                    <td><span class="badge bg-danger">{{ stat.nb_courses }}</span></td>
+                                                    <td><strong>{{ stat.prix_total|floatformat:1 }} DNT</strong></td>
+                                                    <td><span class="badge bg-info">{{ stat.total_agents }}</span></td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="text-center text-muted py-3">
+                                        <p>Aucune course taxi trouvée</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COURSES CHAUFFEUR PRIVÉ -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-car"></i> Courses Chauffeur Privé (10DNT par course)
+                                    <span class="badge bg-light text-dark ms-2">{{ stats_prive|length }} sociétés</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                {% if stats_prive %}
+                                    <div class="table-responsive">
+                                        <table class="table table-striped table-hover">
+                                            <thead class="table-success">
+                                                <tr>
+                                                    <th>Société</th>
+                                                    <th>Nombre de Courses</th>
+                                                    <th>Prix Total (DNT)</th>
+                                                    <th>Agents Transportés</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for stat in stats_prive %}
+                                                <tr>
+                                                    <td>
+                                                        <a href="{% url 'detail_societe_paie' stat.societe %}?date_debut={{ date_debut }}&date_fin={{ date_fin }}&type_chauffeur=prive" 
+                                                           class="text-decoration-none fw-bold" title="Voir le détail">
+                                                            {{ stat.societe }}
+                                                        </a>
+                                                    </td>
+                                                    <td><span class="badge bg-success">{{ stat.nb_courses }}</span></td>
+                                                    <td><strong>{{ stat.prix_total|floatformat:1 }} DNT</strong></td>
+                                                    <td><span class="badge bg-info">{{ stat.total_agents }}</span></td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="text-center text-muted py-3">
+                                        <p>Aucune course chauffeur privé trouvée</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Légende détaillée -->
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6><i class="fas fa-calculator"></i> Méthode de Calcul :</h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <strong>Courses Taxi (15DNT) :</strong>
+                                        <ul class="mb-2">
+                                            <li>Prix divisé par le nombre de sociétés dans la course</li>
+                                            <li>Ex: Course avec 3 sociétés = 15DNT ÷ 3 = 5DNT par société</li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Courses Chauffeur Privé (10DNT) :</strong>
+                                        <ul class="mb-2">
+                                            <li>Prix divisé par le nombre de sociétés dans la course</li>
+                                            <li>Ex: Course avec 2 sociétés = 10DNT ÷ 2 = 5DNT par société</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <strong>Exemple concret :</strong>
+                                        <ul class="mb-0">
+                                            <li>Course Taxi: 4 agents (Société A:2, B:1, C:1) → 15DNT ÷ 3 sociétés = 5DNT par société</li>
+                                            <li>Course Taxi: 3 agents (Société A:1, C:2) → 15DNT ÷ 2 sociétés = 7.5DNT par société</li>
+                                            <li>Société A paye: 5DNT + 7.5DNT = 12.5DNT pour 3 agents transportés</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

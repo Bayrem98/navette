@@ -1,0 +1,2352 @@
+{% extends 'gestion/base.html' %}
+{% load custom_filters %}
+
+{% block page_title %}Gestion Chauffeurs - Affectation Multiple{% endblock %}
+
+{% block extra_js %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.fullscreen@1.6.0/Control.FullScreen.css" />
+<script src="https://unpkg.com/leaflet.fullscreen@1.6.0/Control.FullScreen.js"></script>
+
+<script>
+// ========== GESTION DU FORMULAIRE (PARTIE GAUCHE) ==========
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("🚀 Page Gestion Chauffeurs initialisée");
+    
+    // Éléments du formulaire
+    const typeSelect = document.getElementById('id_type_transport');
+    const heureSelect = document.getElementById('id_heure');
+    const jourSelect = document.getElementById('id_jour');
+    const chauffeurSelect = document.getElementById('id_chauffeur');
+    const agentsContainer = document.getElementById('agents-container');
+    const agentsField = document.getElementById('id_agents');
+    const form = document.getElementById('affectationForm');
+    
+    // ========== 1. HEURES DYNAMIQUES ==========
+    function chargerHeures() {
+        const type = typeSelect.value;
+        console.log(`Type sélectionné: ${type}`);
+        
+        // Vider la liste des heures
+        heureSelect.innerHTML = '<option value="">Sélectionner une heure</option>';
+        
+        if (!type) {
+            heureSelect.disabled = true;
+            heureSelect.style.color = '#495057';
+            agentsContainer.innerHTML = '<div class="alert alert-info">Sélectionnez un type de transport</div>';
+            return;
+        }
+        
+        // Récupérer les heures depuis l'API Django
+        const url = `/chauffeurs/api/heures_par_type/?type_transport=${encodeURIComponent(type)}`;
+        console.log(`URL API Heures: ${url}`);
+        
+        // Afficher chargement
+        heureSelect.disabled = true;
+        heureSelect.style.color = '#495057';
+        heureSelect.innerHTML = '<option value="">Chargement des heures...</option>';
+        
+        fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error(`Erreur ${response.status}`);
+                return response.json();
+            })
+            .then(heuresData => {
+                console.log('Heures reçues:', heuresData);
+                
+                // Vider et réactiver le select
+                heureSelect.innerHTML = '<option value="">Sélectionner une heure</option>';
+                heureSelect.disabled = false;
+                heureSelect.style.color = '#495057';
+                
+                if (heuresData && heuresData.length > 0) {
+                    // Ajouter les options
+                    heuresData.forEach(heure => {
+                        const option = document.createElement('option');
+                        option.value = heure.value;
+                        option.textContent = heure.text;
+                        option.style.color = '#495057';
+                        heureSelect.appendChild(option);
+                    });
+                    
+                    console.log(`${heuresData.length} heures chargées pour ${type}`);
+                } else {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'Aucune heure disponible';
+                    option.style.color = '#495057';
+                    heureSelect.appendChild(option);
+                    console.warn(`Aucune heure trouvée pour ${type}`);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur chargement heures:', error);
+                heureSelect.innerHTML = '<option value="">Erreur de chargement</option>';
+                heureSelect.style.color = '#495057';
+                
+                // Fallback : utiliser les heures codées en dur
+                chargerHeuresFallback(type);
+            });
+    }
+
+    // Fallback si l'API échoue
+    function chargerHeuresFallback(type) {
+        let heures = [];
+        
+        if (type === 'ramassage') {
+            heures = [
+                {valeur: 6, texte: 'Ramassage 6h'},
+                {valeur: 7, texte: 'Ramassage 7h'},
+                {valeur: 8, texte: 'Ramassage 8h'},
+                {valeur: 22, texte: 'Ramassage 22h'}
+            ];
+        } else if (type === 'depart') {
+            heures = [
+                {valeur: 22, texte: 'Départ 22h'},
+                {valeur: 23, texte: 'Départ 23h'},
+                {valeur: 0, texte: 'Départ 0h'},
+                {valeur: 1, texte: 'Départ 1h'},
+                {valeur: 2, texte: 'Départ 2h'},
+                {valeur: 3, texte: 'Départ 3h'}
+            ];
+        }
+        
+        heureSelect.innerHTML = '<option value="">Sélectionner une heure</option>';
+        heureSelect.style.color = '#495057';
+        
+        heures.forEach(heure => {
+            const option = document.createElement('option');
+            option.value = heure.valeur;
+            option.textContent = heure.texte;
+            option.style.color = '#495057';
+            heureSelect.appendChild(option);
+        });
+        heureSelect.disabled = false;
+        
+        console.log(`${heures.length} heures chargées (fallback) pour ${type}`);
+    }
+    
+    // ========== 2. CHARGER LES AGENTS ==========
+    function chargerAgents() {
+        const jour = jourSelect.value;
+        const type = typeSelect.value;
+        const heure = heureSelect.value;
+        
+        console.log(`Chargement agents: ${jour} ${type} ${heure}h`);
+        
+        // Validation
+        if (!jour || !type || !heure) {
+            agentsContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Données incomplètes !</strong><br>
+                    Veuillez compléter tous les champs.
+                </div>
+            `;
+            return;
+        }
+        
+        // Afficher chargement
+        agentsContainer.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+                <h5 class="mt-3">Recherche des agents...</h5>
+                <p class="text-muted">
+                    ${jour} - ${type} - ${heure}h
+                </p>
+            </div>
+        `;
+        
+        // Appel API
+        const url = `/chauffeurs/api/agents_non_affectes/?jour=${encodeURIComponent(jour)}&type_transport=${encodeURIComponent(type)}&heure=${encodeURIComponent(heure)}`;
+        console.log(`URL API: ${url}`);
+        
+        fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error(`Erreur ${response.status}`);
+                return response.json();
+            })
+            .then(agentsData => {
+                console.log(`Données reçues:`, agentsData);
+                afficherAgentsCategories(agentsData);
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                agentsContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-times-circle"></i>
+                        <strong>Erreur de chargement</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            });
+    }
+
+    // ========== 3. AFFICHER AVEC CATÉGORIES ==========
+    function afficherAgentsCategories(agentsData) {
+        console.log("Format agentsData:", typeof agentsData, Array.isArray(agentsData));
+        
+        if (!agentsData || !Array.isArray(agentsData) || agentsData.length === 0) {
+            agentsContainer.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-users-slash"></i>
+                    <strong>Aucun agent disponible</strong><br>
+                    Tous les agents sont déjà affectés ou aucune donnée trouvée.
+                </div>
+            `;
+            agentsField.value = '[]';
+            return;
+        }
+        
+        // Vérifier le format des données
+        let agentsPrincipaux = [];
+        let agentsSecondaires = [];
+        
+        if (typeof agentsData[0] === 'string') {
+            // Format: ['Betty (Soulef BEN AMOR)', 'Chafika (Chafika CHAOUECH)', ...]
+            // Tous les agents sont considérés comme principaux dans ce format
+            console.log("Format détecté: tableau de strings");
+            agentsPrincipaux = agentsData.map(nom => ({
+                nom: nom,
+                info: "Programmé à cette heure",
+                type: "principal"
+            }));
+        } else if (typeof agentsData[0] === 'object') {
+            // Format: [{nom: "...", info: "...", type: "..."}, ...]
+            console.log("Format détecté: tableau d'objets");
+            agentsPrincipaux = agentsData.filter(agent => agent.type === 'principal');
+            agentsSecondaires = agentsData.filter(agent => agent.type === 'secondaire');
+        }
+        
+        console.log("Agents principaux:", agentsPrincipaux.length);
+        console.log("Agents secondaires:", agentsSecondaires.length);
+        
+        let html = `
+            <div class="agents-checklist">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">
+                        <i class="fas fa-users"></i>
+                        Agents disponibles
+                    </h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="tout-cocher-principal">
+                        <label class="form-check-label" for="tout-cocher-principal">
+                            Tout cocher
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="input-group mb-3">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" class="form-control" id="recherche-agent" placeholder="Rechercher un agent...">
+                </div>
+                
+                <div class="agents-list" style="max-height: 400px; overflow-y: auto;">
+        `;
+        
+        // SECTION 1: AGENTS PRINCIPAUX (programmés à cette heure)
+        if (agentsPrincipaux.length > 0) {
+            html += `
+                <div class="category-section principal mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-success mb-0">
+                            <i class="fas fa-star me-2"></i>
+                            Agents programmés à ${heureSelect.value}h
+                        </h6>
+                        <span class="badge bg-success">${agentsPrincipaux.length}</span>
+                    </div>
+                    <div class="alert alert-success small mb-3">
+                        <i class="fas fa-info-circle"></i> Ces agents sont prévus dans le planning à cette heure.
+                    </div>
+            `;
+            
+            agentsPrincipaux.forEach((agent, index) => {
+                const agentName = agent.nom || agent;
+                const agentInfo = agent.info || "Programmé à cette heure";
+                
+                html += `
+                    <div class="form-check mb-2 agent-item agent-principal">
+                        <input class="form-check-input agent-checkbox" type="checkbox" 
+                               value="${agentName}" id="agent_p_${index}" checked>
+                        <label class="form-check-label" for="agent_p_${index}">
+                            <strong>${agentName}</strong>
+                            <br>
+                            <small class="text-success">
+                                <i class="fas fa-clock me-1"></i>
+                                ${agentInfo}
+                            </small>
+                        </label>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+        }
+        
+        // SECTION 2: AGENTS SECONDAIRES (autres horaires)
+        if (agentsSecondaires.length > 0) {
+            html += `
+                <div class="category-section secondaire">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-warning mb-0">
+                            <i class="fas fa-user-clock me-2"></i>
+                            Agents disponibles à d'autres heures
+                        </h6>
+                        <span class="badge bg-warning">${agentsSecondaires.length}</span>
+                    </div>
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle"></i>
+                        Ces agents travaillent ce jour mais à d'autres horaires.
+                        Vous pouvez les sélectionner pour des retards, renforts, etc.
+                    </div>
+            `;
+            
+            agentsSecondaires.forEach((agent, index) => {
+                const agentName = agent.nom || agent;
+                const agentInfo = agent.info || "Disponible à d'autres heures";
+                
+                html += `
+                    <div class="form-check mb-2 agent-item agent-secondaire">
+                        <input class="form-check-input agent-checkbox" type="checkbox" 
+                               value="${agentName}" id="agent_s_${index}">
+                        <label class="form-check-label" for="agent_s_${index}">
+                            <strong>${agentName}</strong>
+                            <br>
+                            <small class="text-warning">
+                                <i class="fas fa-clock me-1"></i>
+                                ${agentInfo}
+                            </small>
+                        </label>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+        }
+        
+        html += `
+                </div>
+            </div>
+            
+            <div class="alert alert-info mt-3">
+                <i class="fas fa-info-circle"></i>
+                <strong>${agentsPrincipaux.length + agentsSecondaires.length} agent(s) disponible(s)</strong><br>
+                • <span class="text-success">${agentsPrincipaux.length} programmé(s) à cette heure</span><br>
+                • <span class="text-warning">${agentsSecondaires.length} disponible(s) à d'autres heures</span>
+            </div>
+        `;
+        
+        agentsContainer.innerHTML = html;
+        
+        // Configurer les événements
+        configurerEvenementsAgents();
+        mettreAJourAgentsSelection();
+    }
+    
+    // ========== 4. CONFIGURATION ÉVÉNEMENTS AGENTS ==========
+    function configurerEvenementsAgents() {
+        // Tout cocher/décocher (seulement les principaux)
+        const toutCocher = document.getElementById('tout-cocher-principal');
+        if (toutCocher) {
+            toutCocher.addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.agent-principal .agent-checkbox');
+                checkboxes.forEach(cb => cb.checked = this.checked);
+                mettreAJourAgentsSelection();
+            });
+            
+            // Cocher automatiquement toutes les checkboxes principales
+            setTimeout(() => {
+                const principalCheckboxes = document.querySelectorAll('.agent-principal .agent-checkbox');
+                principalCheckboxes.forEach(cb => {
+                    cb.checked = true;
+                });
+                mettreAJourAgentsSelection();
+            }, 100);
+        }
+        
+        // Recherche
+        const recherche = document.getElementById('recherche-agent');
+        if (recherche) {
+            recherche.addEventListener('input', function() {
+                const terme = this.value.toLowerCase();
+                const items = document.querySelectorAll('.agent-item');
+                
+                items.forEach(item => {
+                    const label = item.querySelector('label');
+                    const texte = label ? label.textContent.toLowerCase() : '';
+                    item.style.display = texte.includes(terme) ? 'block' : 'none';
+                });
+            });
+        }
+        
+        // Chaque checkbox
+        document.querySelectorAll('.agent-checkbox').forEach(cb => {
+            cb.addEventListener('change', mettreAJourAgentsSelection);
+        });
+    }
+    
+    function mettreAJourAgentsSelection() {
+        const checkboxes = document.querySelectorAll('.agent-checkbox:checked');
+        const agents = Array.from(checkboxes).map(cb => cb.value);
+        agentsField.value = JSON.stringify(agents);
+        console.log(`${agents.length} agent(s) sélectionné(s):`, agents);
+        
+        // Mettre à jour le compteur
+        const compteur = document.getElementById('compteur-agents');
+        if (!compteur) {
+            // Créer le compteur s'il n'existe pas
+            const container = document.getElementById('agents-container');
+            if (container) {
+                const existingCounter = container.querySelector('.agent-counter');
+                if (existingCounter) existingCounter.remove();
+                
+                const counterDiv = document.createElement('div');
+                counterDiv.className = 'agent-counter alert alert-success mt-2';
+                counterDiv.id = 'compteur-agents';
+                counterDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${agents.length} agent(s) sélectionné(s)`;
+                container.appendChild(counterDiv);
+            }
+        } else {
+            compteur.innerHTML = `<i class="fas fa-check-circle"></i> ${agents.length} agent(s) sélectionné(s)`;
+        }
+    }
+    
+    // ========== 5. ÉVÉNEMENTS PRINCIPAUX ==========
+    
+    // Quand le type change → charger les heures
+    if (typeSelect) {
+        typeSelect.addEventListener('change', chargerHeures);
+    }
+    
+    // Quand l'heure change → charger les agents
+    if (heureSelect) {
+        heureSelect.addEventListener('change', chargerAgents);
+    }
+    
+    // Quand le jour change → si heure déjà sélectionnée, recharger
+    if (jourSelect) {
+        jourSelect.addEventListener('change', function() {
+            if (heureSelect.value) {
+                chargerAgents();
+            }
+        });
+    }
+    
+    // ========== 6. VALIDATION DU FORMULAIRE ==========
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Vérifier les agents sélectionnés
+            const agents = JSON.parse(agentsField.value || '[]');
+            if (agents.length === 0) {
+                e.preventDefault();
+                alert('❌ Vous devez sélectionner au moins un agent !');
+                return false;
+            }
+            
+            // Vérifier le chauffeur
+            if (!chauffeurSelect.value) {
+                e.preventDefault();
+                alert('❌ Vous devez sélectionner un chauffeur !');
+                return false;
+            }
+            
+            // Vérifier l'heure
+            if (!heureSelect.value) {
+                e.preventDefault();
+                alert('❌ Vous devez sélectionner une heure !');
+                return false;
+            }
+            
+            console.log('✅ Formulaire valide, envoi...');
+            console.log('Agents:', agents);
+            console.log('Chauffeur:', chauffeurSelect.value);
+            console.log('Heure:', heureSelect.value);
+            console.log('Jour:', jourSelect.value);
+            console.log('Type:', typeSelect.value);
+            
+            return true;
+        });
+    }
+    
+    // ========== 7. INITIALISATION ==========
+    
+    // Forcer la couleur des selects au chargement
+    setTimeout(() => {
+        // Appliquer la couleur normale à tous les selects
+        const selects = document.querySelectorAll('select.form-control');
+        selects.forEach(select => {
+            select.style.color = '#495057';
+        });
+        
+        // Si le type est déjà sélectionné au chargement, charger les heures
+        if (typeSelect && typeSelect.value) {
+            chargerHeures();
+        }
+        
+        // Si tout est déjà rempli, charger les agents
+        if (typeSelect?.value && heureSelect?.value && jourSelect?.value) {
+            setTimeout(chargerAgents, 500);
+        }
+    }, 100);
+});
+
+// ========== PARTIE CARTE (corrections) ==========
+
+// Variables globales pour la carte
+let map = null;
+let markers = [];
+let agentsCorriges = {};
+let currentCourseId = null;
+
+// Variables pour le modal de correction
+let correctionMap = null;
+let correctionMarker = null;
+let currentAgentId = null;
+let currentAgentNom = null;
+let currentAdresseOriginale = null;
+
+// Fonction pour corriger les coordonnées d'un agent
+window.corrigerCoordonneesAgent = async function(agentId, agentNom, adresse, courseId) {
+    console.log("📝 Correction agent:", agentId, agentNom);
+    currentAgentId = agentId;
+    currentAgentNom = agentNom;
+    currentAdresseOriginale = adresse;
+    
+    const agentDiv = document.querySelector(`[data-agent-id="${agentId}"]`);
+    const latActuelle = agentDiv ? parseFloat(agentDiv.dataset.latitude) || 35.8256 : 35.8256;
+    const lonActuelle = agentDiv ? parseFloat(agentDiv.dataset.longitude) || 10.6415 : 10.6415;
+    
+    console.log("Coordonnées actuelles:", latActuelle, lonActuelle);
+    
+    const modalHTML = `
+        <div class="modal fade" id="modal-correction-${agentId}" tabindex="-1">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-map-marker-alt"></i> Corriger la position - ${agentNom}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <!-- COLONNE GAUCHE : Formulaire -->
+                            <div class="col-md-5">
+                                <div class="alert alert-info mb-3">
+                                    <i class="fas fa-info-circle"></i>
+                                    <strong>Agent :</strong> ${agentNom}<br>
+                                    <strong>Adresse originale :</strong> ${adresse}
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Coordonnées</label>
+                                    <div class="input-group mb-3">
+                                        <span class="input-group-text">Latitude</span>
+                                        <input type="number" step="0.000001" id="correction-lat-${agentId}" 
+                                               class="form-control coord-input" value="${latActuelle.toFixed(6)}">
+                                    </div>
+                                    <div class="input-group mb-3">
+                                        <span class="input-group-text">Longitude</span>
+                                        <input type="number" step="0.000001" id="correction-lon-${agentId}" 
+                                               class="form-control coord-input" value="${lonActuelle.toFixed(6)}">
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Nouvelle adresse</label>
+                                        <textarea class="form-control" id="correction-adresse-${agentId}" 
+                                                  rows="3" placeholder="L'adresse sera mise à jour automatiquement...">${adresse}</textarea>
+                                    </div>
+                                </div>
+                                
+                                <div class="card mb-3">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0"><i class="fas fa-location-crosshairs"></i> Références rapides</h6>
+                                    </div>
+                                    <div class="card-body p-2">
+                                        <div class="row small">
+                                            <div class="col-6">
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.8180, 10.6150, 'Taffala, Sousse')">Taffala</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.8370, 10.5950, 'Sahloul , 1, 2 ')">Sahloul</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.8070, 10.5920, 'Cite Riadh, Sousse')">Cite Riadh</button>
+                                            </div>
+                                            <div class="col-6">
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.8680, 10.5650, 'Akouda, Sousse')">Akouda</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.8200, 10.5600, 'Kalaa Seghira, Sousse')">Kalaa Seghira</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.8660, 10.5360, 'Kalaâ Kebira')">Kalaâ Kebira</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.8275, 10.6392, 'Sousse Medina')">Sousse Medina</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.7300, 10.5850, 'Msaken')">Msaken</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.9180, 10.5900, 'Chatt Meriem')">Chatt Meriem</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.8580, 10.5980, 'Hammam Sousse')">Hammam Sousse</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary w-100 mb-1" onclick="placerSurCarte(35.7950, 10.6350, 'Sidi Abdelhamid')">Sidi Abdelhamid</button>
+
+
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-grid gap-2">
+                                    <button type="button" class="btn btn-lg btn-success" onclick="appliquerCorrection(${agentId}, '${agentNom.replace(/'/g, "\\'")}', ${courseId})">
+                                        <i class="fas fa-save"></i> Enregistrer définitivement
+                                    </button>
+                                    <button type="button" class="btn btn-lg btn-secondary" data-bs-dismiss="modal">
+                                        <i class="fas fa-times"></i> Annuler
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- COLONNE DROITE : Carte -->
+                            <div class="col-md-7">
+                                <div class="card h-100">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="mb-0"><i class="fas fa-map"></i> Sélectionner la position sur la carte</h6>
+                                    </div>
+                                    <div class="card-body p-0 position-relative">
+                                        <div id="map-correction-${agentId}" style="height: 500px; width: 100%; border-radius: 0 0 5px 5px;"></div>
+                                        <div id="geocoding-loading-${agentId}" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Chargement...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const modalDiv = document.createElement('div');
+    modalDiv.innerHTML = modalHTML;
+    document.body.appendChild(modalDiv);
+    
+    const modal = new bootstrap.Modal(document.getElementById(`modal-correction-${agentId}`));
+    
+    modalDiv.addEventListener('shown.bs.modal', function () {
+        setTimeout(() => {
+            initialiserCarteCorrection(agentId, latActuelle, lonActuelle, adresse);
+        }, 300);
+    });
+    
+    modalDiv.addEventListener('hidden.bs.modal', function () {
+        setTimeout(() => {
+            if (correctionMap) {
+                correctionMap.remove();
+                correctionMap = null;
+                correctionMarker = null;
+            }
+            modalDiv.remove();
+        }, 500);
+    });
+    
+    modal.show();
+};
+
+// Fonction pour géocoder les coordonnées
+async function geocoderCoordonnees(lat, lng) {
+    try {
+        console.log(`🌍 Géocodage coordonnées: ${lat}, ${lng}`);
+        
+        const response = await fetch('/geolocalisation/reverse_geocoder/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({
+                latitude: lat,
+                longitude: lng
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Erreur HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.adresse_formatee) {
+            return data.adresse_formatee;
+        } else {
+            return getNomQuartier(lat, lng);
+        }
+        
+    } catch (error) {
+        console.error('❌ Erreur géocodage API Django:', error);
+        return getNomQuartier(lat, lng);
+    }
+}
+
+// Fonction pour obtenir le nom du quartier
+function getNomQuartier(lat, lng) {
+    if (lat >= 35.824 && lat <= 35.830 && lng >= 10.634 && lng <= 10.640) {
+        return 'Sousse Medina, Sousse, Tunisie';
+    } else if (lat >= 35.822 && lat <= 35.830 && lng >= 10.610 && lng <= 10.628) {
+        return 'Khezama Est, Sousse, Tunisie';
+    } else if (lat >= 35.849 && lat <= 35.855 && lng >= 10.602 && lng <= 10.608) {
+        return 'Khezama Ouest, Sousse, Tunisie';
+    } else if (lat >= 35.808 && lat <= 35.8230 && lng >= 10.552 && lng <= 10.565) {
+        return 'Kalaa Seghira, Sousse, Tunisie';
+    } else if (lat >= 35.854 && lat <= 35.870 && lng >= 10.590 && lng <= 10.605) {
+        return 'Hammam Sousse, Sousse, Tunisie';
+    } else if (lat >= 35.835 && lat <= 35.845 && lng >= 10.596 && lng <= 10.596) {
+        return 'Sahloul, Sousse, Tunisie';
+    } else if (lat >= 35.715 && lat <= 35.735 && lng >= 10.570 && lng <= 10.592) {
+        return 'Msaken, Sousse, Tunisie';
+    } else if (lat >= 35.812 && lat <= 35.820 && lng >= 10.596 && lng <= 10.605) {
+        return 'zouhour, Sousse, Tunisie';
+    } else if (lat >= 35.862 && lat <= 35.875 && lng >= 10.530 && lng <= 10.556) {
+        return 'Kalaa Kebira, Sousse, Tunisie';
+    } else if (lat >= 35.910 && lat <= 35.925 && lng >= 10.590 && lng <= 10.602) {
+        return 'Chatt Meriem, Sousse, Tunisie';
+    } else if (lat >= 35.812 && lat <= 35.821 && lng >= 10.610 && lng <= 10.615) {
+        return 'Taffala, Sousse, Tunisie';
+    } else if (lat >= 35.785 && lat <= 35.801 && lng >= 10.632 && lng <= 10.642) {
+        return 'Sidi Abdelhamid, Sousse, Tunisie';
+    } else if (lat >= 35.865 && lat <= 35.872 && lng >= 10.560 && lng <= 10.575) {
+        return 'Akouda, Sousse, Tunisie';
+    } else if (lat >= 35.800 && lat <= 35.815 && lng >= 10.580 && lng <= 10.595) {
+        return 'Cite Riadh, Sousse, Tunisie';
+    } else {
+        return `Lat: ${lat.toFixed(4)}, Lon: ${lng.toFixed(4)}, Sousse, Tunisie`;
+    }
+}
+
+// Initialiser la carte dans le modal de correction
+function initialiserCarteCorrection(agentId, lat, lon, adresseOriginale) {
+    console.log("Initialisation carte correction:", agentId, lat, lon);
+    
+    const mapId = `map-correction-${agentId}`;
+    const mapElement = document.getElementById(mapId);
+    
+    if (!mapElement) {
+        console.error("Élément carte non trouvé:", mapId);
+        return;
+    }
+    
+    correctionMap = L.map(mapId).setView([lat, lon], 15);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+    }).addTo(correctionMap);
+    
+    correctionMap.addControl(new L.Control.FullScreen());
+    
+    const customIcon = L.divIcon({
+        className: 'correction-marker',
+        html: `
+            <div style="
+                background-color: #ff5733; 
+                color: white; 
+                width: 40px; 
+                height: 40px; 
+                border-radius: 50%; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                font-weight: bold; 
+                border: 4px solid white; 
+                box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+                font-size: 16px;
+            ">
+                <i class="fas fa-map-marker-alt"></i>
+            </div>
+        `,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+    });
+    
+    correctionMarker = L.marker([lat, lon], {
+        draggable: true,
+        icon: customIcon
+    }).addTo(correctionMap);
+    
+    updateMarkerPopup(lat, lon, adresseOriginale);
+    
+    correctionMarker.on('dragend', async function(e) {
+        const position = e.target.getLatLng();
+        console.log("Marqueur déplacé vers:", position.lat, position.lng);
+        
+        updateCoordsInputs(agentId, position.lat, position.lng);
+        showGeocodingLoader(agentId, true);
+        
+        try {
+            const nouvelleAdresse = await geocoderCoordonnees(position.lat, position.lng);
+            updateAdresseInput(agentId, nouvelleAdresse);
+            updateMarkerPopup(position.lat, position.lng, nouvelleAdresse);
+        } catch (error) {
+            console.error("Erreur géocodage:", error);
+            const quartier = getNomQuartier(position.lat, position.lng);
+            updateAdresseInput(agentId, quartier);
+            updateMarkerPopup(position.lat, position.lng, quartier);
+        } finally {
+            showGeocodingLoader(agentId, false);
+        }
+    });
+    
+    correctionMap.on('click', async function(e) {
+        const position = e.latlng;
+        console.log("Carte cliquée à:", position.lat, position.lng);
+        correctionMarker.setLatLng(position);
+        
+        updateCoordsInputs(agentId, position.lat, position.lng);
+        showGeocodingLoader(agentId, true);
+        
+        try {
+            const nouvelleAdresse = await geocoderCoordonnees(position.lat, position.lng);
+            updateAdresseInput(agentId, nouvelleAdresse);
+            updateMarkerPopup(position.lat, position.lng, nouvelleAdresse);
+        } catch (error) {
+            console.error("Erreur géocodage:", error);
+            const quartier = getNomQuartier(position.lat, position.lng);
+            updateAdresseInput(agentId, quartier);
+            updateMarkerPopup(position.lat, position.lng, quartier);
+        } finally {
+            showGeocodingLoader(agentId, false);
+        }
+    });
+    
+    document.getElementById(`correction-lat-${agentId}`).addEventListener('change', async function() {
+        const lat = parseFloat(this.value);
+        const lon = parseFloat(document.getElementById(`correction-lon-${agentId}`).value);
+        if (!isNaN(lat) && !isNaN(lon)) {
+            correctionMarker.setLatLng([lat, lon]);
+            correctionMap.setView([lat, lon], correctionMap.getZoom());
+            
+            const nouvelleAdresse = await geocoderCoordonnees(lat, lon);
+            updateAdresseInput(agentId, nouvelleAdresse);
+            updateMarkerPopup(lat, lon, nouvelleAdresse);
+        }
+    });
+    
+    document.getElementById(`correction-lon-${agentId}`).addEventListener('change', async function() {
+        const lat = parseFloat(document.getElementById(`correction-lat-${agentId}`).value);
+        const lon = parseFloat(this.value);
+        if (!isNaN(lat) && !isNaN(lon)) {
+            correctionMarker.setLatLng([lat, lon]);
+            correctionMap.setView([lat, lon], correctionMap.getZoom());
+            
+            const nouvelleAdresse = await geocoderCoordonnees(lat, lon);
+            updateAdresseInput(agentId, nouvelleAdresse);
+            updateMarkerPopup(lat, lon, nouvelleAdresse);
+        }
+    });
+    
+    setTimeout(() => {
+        correctionMap.invalidateSize();
+    }, 100);
+}
+
+// Mettre à jour le popup du marqueur
+function updateMarkerPopup(lat, lng, adresse) {
+    if (correctionMarker) {
+        correctionMarker.bindPopup(`
+            <div style="width: 250px;">
+                <h6 style="margin: 0 0 10px 0; color: #2c3e50;">
+                    <i class="fas fa-map-marker-alt"></i> Nouvelle position
+                </h6>
+                <p style="margin: 0 0 5px 0;">
+                    <strong>Latitude:</strong> ${lat.toFixed(6)}
+                </p>
+                <p style="margin: 0 0 5px 0;">
+                    <strong>Longitude:</strong> ${lng.toFixed(6)}
+                </p>
+                <p style="margin: 0 0 5px 0;">
+                    <strong>Adresse:</strong> ${adresse}
+                </p>
+            </div>
+        `).openPopup();
+    }
+}
+
+// Afficher/cacher le loader de géocodage
+function showGeocodingLoader(agentId, show) {
+    const loader = document.getElementById(`geocoding-loading-${agentId}`);
+    if (loader) {
+        loader.style.display = show ? 'block' : 'none';
+    }
+}
+
+// Mettre à jour les champs de coordonnées
+function updateCoordsInputs(agentId, lat, lng) {
+    console.log("Mise à jour inputs:", agentId, lat, lng);
+    
+    const latInput = document.getElementById(`correction-lat-${agentId}`);
+    const lonInput = document.getElementById(`correction-lon-${agentId}`);
+    
+    if (latInput && lonInput) {
+        latInput.value = lat.toFixed(6);
+        lonInput.value = lng.toFixed(6);
+        
+        latInput.dispatchEvent(new Event('input'));
+        lonInput.dispatchEvent(new Event('input'));
+    } else {
+        console.error("Inputs non trouvés pour agent:", agentId);
+    }
+}
+
+// Mettre à jour le champ d'adresse
+function updateAdresseInput(agentId, adresse) {
+    console.log("Mise à jour adresse:", agentId, adresse);
+    
+    const adresseInput = document.getElementById(`correction-adresse-${agentId}`);
+    if (adresseInput) {
+        adresseInput.value = adresse;
+    }
+}
+
+// Placer sur la carte depuis les boutons de référence
+window.placerSurCarte = function(lat, lng, adresse) {
+    console.log("Placer sur carte:", lat, lng, adresse);
+    
+    if (correctionMap && correctionMarker) {
+        correctionMarker.setLatLng([lat, lng]);
+        correctionMap.setView([lat, lng], 16);
+        
+        if (currentAgentId) {
+            updateCoordsInputs(currentAgentId, lat, lng);
+            updateAdresseInput(currentAgentId, adresse);
+            updateMarkerPopup(lat, lng, adresse);
+        }
+    } else {
+        console.error("Carte ou marqueur non initialisé");
+    }
+};
+
+// Appliquer la correction et sauvegarder en base de données
+window.appliquerCorrection = async function(agentId, agentNom, courseId) {
+    const latInput = document.getElementById(`correction-lat-${agentId}`);
+    const lonInput = document.getElementById(`correction-lon-${agentId}`);
+    const adresseInput = document.getElementById(`correction-adresse-${agentId}`);
+    
+    if (!latInput || !lonInput || !adresseInput) {
+        alert('Erreur: champs de coordonnées ou adresse non trouvés');
+        return;
+    }
+    
+    const nouvelleLat = parseFloat(latInput.value);
+    const nouvelleLon = parseFloat(lonInput.value);
+    const nouvelleAdresse = adresseInput.value.trim();
+    
+    console.log("Application correction:", nouvelleLat, nouvelleLon, nouvelleAdresse);
+    
+    if (!nouvelleLat || !nouvelleLon || isNaN(nouvelleLat) || isNaN(nouvelleLon)) {
+        alert('Veuillez entrer des coordonnées valides');
+        return;
+    }
+    
+    if (!nouvelleAdresse) {
+        alert('Veuillez vérifier que l\'adresse a été correctement géocodée');
+        return;
+    }
+    
+    if (nouvelleLat < -90 || nouvelleLat > 90) {
+        alert('Latitude invalide. Doit être entre -90 et 90');
+        return;
+    }
+    
+    if (nouvelleLon < -180 || nouvelleLon > 180) {
+        alert('Longitude invalide. Doit être entre -180 et 180');
+        return;
+    }
+    
+    try {
+        const data = {
+            agent_id: parseInt(agentId),
+            latitude: nouvelleLat,
+            longitude: nouvelleLon,
+            adresse: nouvelleAdresse
+        };
+        
+        console.log("📤 Envoi à l'API:", data);
+        
+        const response = await fetch('/api/corriger_coordonnees/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify(data)
+        });
+        
+        console.log("📥 Réponse API status:", response.status);
+        
+        const responseText = await response.text();
+        console.log("📥 Réponse API text:", responseText);
+        
+        let jsonResponse;
+        try {
+            jsonResponse = JSON.parse(responseText);
+        } catch (e) {
+            console.error("❌ Erreur de parsing JSON:", e);
+            throw new Error(`Réponse invalide du serveur: ${responseText.substring(0, 100)}...`);
+        }
+        
+        console.log("📥 Réponse API JSON:", jsonResponse);
+        
+        if (jsonResponse.success) {
+            agentsCorriges[agentId] = {
+                latitude: nouvelleLat,
+                longitude: nouvelleLon,
+                adresse: nouvelleAdresse,
+                corrige_manuellement: true,
+                timestamp: new Date().toISOString()
+            };
+            
+            afficherCourseSurCarte(courseId);
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById(`modal-correction-${agentId}`));
+            if (modal) modal.hide();
+            
+            showNotification('success', `Position et adresse de ${agentNom} corrigées avec succès !`);
+            
+            setTimeout(() => {
+                const modalDiv = document.getElementById(`modal-correction-${agentId}`);
+                if (modalDiv && modalDiv.parentNode) {
+                    modalDiv.parentNode.remove();
+                }
+            }, 500);
+            
+        } else {
+            throw new Error(jsonResponse.error || 'Erreur inconnue du serveur');
+        }
+        
+    } catch (error) {
+        console.error('❌ Erreur lors de la correction :', error);
+        alert(`Erreur : ${error.message}\n\nVeuillez vérifier la console pour plus de détails.`);
+    }
+};
+
+// Initialiser la carte principale
+function initialiserCarte() {
+    const mapElement = document.getElementById('map-course');
+    if (!mapElement) {
+        console.error("Élément #map-course non trouvé");
+        return;
+    }
+    
+    if (map && typeof map.remove === 'function') {
+        map.remove();
+    }
+    
+    map = L.map('map-course').setView([35.8342, 10.6296], 14);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+    }).addTo(map);
+    
+    map.addControl(new L.Control.FullScreen());
+    
+    setTimeout(() => {
+        if (map) {
+            map.invalidateSize(true);
+            console.log("✅ Carte redimensionnée et prête");
+        }
+    }, 300);
+}
+
+// Afficher une course sur la carte
+window.afficherCourseSurCarte = async function(courseId) {
+    console.log("🎯 Affichage carte pour course ID:", courseId);
+    if (map) {
+        map.remove();
+        map = null;
+        markers = [];
+    }
+    currentCourseId = courseId;
+    
+    const sectionCarte = document.getElementById('section-carte');
+    sectionCarte.style.display = 'block';
+    
+    setTimeout(() => {
+        if (!map) {
+            initialiserCarte();
+        }
+        
+        setTimeout(() => {
+            if (map) {
+                map.invalidateSize();
+                map.setView([35.8256, 10.6415], 13);
+            }
+        }, 100);
+        
+        document.getElementById('loading-carte').style.display = 'block';
+        document.getElementById('map-course').style.display = 'none';
+        document.getElementById('details-carte').innerHTML = '';
+        
+        sectionCarte.scrollIntoView({ behavior: 'smooth' });
+        
+        chargerDonneesCourse(courseId);
+        
+    }, 50);
+};
+
+// Fonction séparée pour charger les données
+async function chargerDonneesCourse(courseId) {
+    try {
+        const response = await fetch(`/chauffeurs/api/carte_course/${courseId}/`);
+        if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
+        
+        const data = await response.json();
+        console.log("📊 Données reçues:", data);
+        
+        document.getElementById('loading-carte').style.display = 'none';
+        document.getElementById('map-course').style.display = 'block';
+        
+        if (data.success) {
+            if (data.points && Array.isArray(data.points)) {
+                data.points = data.points.map(point => {
+                    if (agentsCorriges[point.agent_id]) {
+                        return {
+                            ...point,
+                            latitude: agentsCorriges[point.agent_id].latitude,
+                            longitude: agentsCorriges[point.agent_id].longitude,
+                            adresse: agentsCorriges[point.agent_id].adresse || point.adresse,
+                            corrige_manuellement: true
+                        };
+                    }
+                    return point;
+                });
+            }
+            
+            await afficherDonneesCourse(data);
+        } else {
+            afficherErreurCarte(data.error || 'Erreur inconnue');
+        }
+    } catch (error) {
+        console.error("🔥 Erreur fetch:", error);
+        document.getElementById('loading-carte').style.display = 'none';
+        afficherErreurCarte(error.message);
+    }
+}
+
+// Afficher les données de la course
+async function afficherDonneesCourse(data) {
+    try {
+        console.log("🗺️ Affichage données course:", data);
+        
+        clearMap();
+        
+        const detailsDiv = document.getElementById('details-carte');
+        
+        let detailsHTML = `
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-route"></i> Itinéraire de la course
+                        <span class="badge bg-light text-dark ms-2">ID: ${data.course_id}</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Chauffeur:</strong> ${data.chauffeur || 'Non spécifié'}<br>
+                            <strong>Type:</strong> ${data.type_transport || 'Non spécifié'}<br>
+                            <strong>Heure:</strong> ${data.heure || '?'}h
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Date:</strong> ${data.date || 'Non spécifié'}<br>
+                            <strong>Jour:</strong> ${data.jour || 'Non spécifié'}<br>
+                            <strong>Agents:</strong> ${data.nombre_agents || 0}
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-success mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-flag-checkered fa-2x me-3"></i>
+                            <div>
+                                <strong class="d-block">Point de départ fixe:</strong>
+                                ${data.point_depart ? data.point_depart.nom : 'DÉPART FIXE - Complexe Zaoui'} 
+                                <br>
+                                <small>${data.point_depart ? data.point_depart.adresse : 'rue rabat complexe zaoui sousse 4000'}</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <div class="card bg-success text-white text-center py-2">
+                                <h6 class="mb-0">${data.distance_totale || 0} km</h6>
+                                <small>Distance totale</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-warning text-white text-center py-2">
+                                <h6 class="mb-0">${Math.round(data.temps_estime || 0)} min</h6>
+                                <small>Temps estimé</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-info text-white text-center py-2">
+                                <h6 class="mb-0">${data.nombre_agents || 0}</h6>
+                                <small>Points d'arrêt</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-secondary text-white text-center py-2">
+                                <h6 class="mb-0">${data.course_id || 'N/A'}</h6>
+                                <small>ID Course</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6><i class="fas fa-users"></i> Détail des agents (${data.points ? data.points.length : 0})</h6>
+                        </div>
+                        
+                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Agent</th>
+                                        <th>Adresse</th>
+                                        <th>Position</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+        `;
+        
+        if (data.points && data.points.length > 0) {
+            data.points.forEach((point, index) => {
+                const agentId = point.agent_id || point.id || (index + 1000);
+                const quartier = point.adresse.toLowerCase().includes('ghodrane') ? 'Ghodrane' :
+                               point.adresse.toLowerCase().includes('riadh') ? 'Riadh' :
+                               point.adresse.toLowerCase().includes('hammem sousse') ? 'Hammem sousse' :
+                               point.adresse.toLowerCase().includes('lac') ? 'Lac' :
+                               point.adresse.toLowerCase().includes('cite') ? 'Cité' :
+                               point.adresse.toLowerCase().includes('sousse') ? 'Sousse Centre' : 'Autre';
+                
+                const statutPosition = point.corrige_manuellement ? 
+                    '<span class="badge bg-success"><i class="fas fa-check"></i> Corrigée</span>' :
+                    point.latitude && point.longitude ?
+                    '<span class="badge bg-info"><i class="fas fa-check"></i> OK</span>' :
+                    '<span class="badge bg-warning"><i class="fas fa-exclamation"></i> À vérifier</span>';
+                
+                detailsHTML += `
+                    <tr data-agent-id="${point.agent_id || index}" 
+                        data-latitude="${point.latitude || ''}" 
+                        data-longitude="${point.longitude || ''}">
+                        <td><span class="badge bg-primary">${index + 1}</span></td>
+                        <td><strong>${point.nom}</strong></td>
+                        <td><small>${point.adresse.substring(0, 40)}${point.adresse.length > 40 ? '...' : ''}</small></td>
+                        <td>${statutPosition}<br><small>${quartier}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-warning" 
+                                    onclick="corrigerCoordonneesAgent(${point.agent_id || index}, '${point.nom.replace(/'/g, "\\'")}', '${point.adresse.replace(/'/g, "\\'")}', ${data.course_id})"
+                                    title="Corriger la position">
+                                <i class="fas fa-map-marker-alt"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+        
+        detailsHTML += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        detailsDiv.innerHTML = detailsHTML;
+        
+        afficherPointsSurCarte(data);
+        
+    } catch (error) {
+        console.error("💥 Erreur dans afficherDonneesCourse:", error);
+        afficherErreurCarte(error.message);
+    }
+}
+
+// Afficher les points sur la carte
+function afficherPointsSurCarte(data) {
+    try {
+        clearMap();
+        
+        const departLat = 35.8342;
+        const departLon = 10.6296;
+        
+        const departMarker = L.marker([departLat, departLon], {
+            icon: L.divIcon({
+                className: 'depart-marker',
+                html: `
+                    <div style="
+                        background-color: #28a745; 
+                        color: white; 
+                        width: 40px; 
+                        height: 40px; 
+                        border-radius: 50%; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        font-weight: bold; 
+                        border: 3px solid white; 
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+                        font-size: 14px;
+                    ">
+                        <i class="fas fa-flag-checkered"></i>
+                    </div>
+                `,
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            })
+        }).addTo(map)
+        .bindPopup(`
+            <div style="width: 250px;">
+                <div style="background: #28a745; color: white; padding: 10px; border-radius: 5px 5px 0 0;">
+                    <h6 style="margin: 0;"><i class="fas fa-flag-checkered"></i> POINT DE DÉPART</h6>
+                </div>
+                <div style="padding: 10px;">
+                    <p style="margin: 0 0 5px 0;"><strong>Complexe Zaoui</strong></p>
+                    <p style="margin: 0 0 5px 0; font-size: 0.9em;">rue rabat complexe zaoui sousse 4000</p>
+                </div>
+            </div>
+        `).openPopup();
+        
+        markers.push(departMarker);
+        
+        const points = data.points || [];
+        if (points.length === 0) {
+            console.warn("Aucun point à afficher");
+            return;
+        }
+        
+        let pointsRestants = points.map((point, index) => ({
+            ...point,
+            originalIndex: index,
+            latitude: parseFloat(point.latitude),
+            longitude: parseFloat(point.longitude)
+        }));
+        
+        let currentLat = departLat;
+        let currentLon = departLon;
+        const pointsOrdres = [];
+        
+        while (pointsRestants.length > 0) {
+            let minDistance = Infinity;
+            let pointLePlusProche = null;
+            let indexLePlusProche = -1;
+            
+            for (let i = 0; i < pointsRestants.length; i++) {
+                const point = pointsRestants[i];
+                if (!point.latitude || !point.longitude) continue;
+                
+                const dLat = point.latitude - currentLat;
+                const dLon = point.longitude - currentLon;
+                const distance = Math.sqrt(dLat * dLat + dLon * dLon);
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    pointLePlusProche = point;
+                    indexLePlusProche = i;
+                }
+            }
+            
+            if (pointLePlusProche) {
+                pointsOrdres.push(pointLePlusProche);
+                currentLat = pointLePlusProche.latitude;
+                currentLon = pointLePlusProche.longitude;
+                pointsRestants.splice(indexLePlusProche, 1);
+            }
+        }
+        
+        console.log("🎯 Itinéraire optimisé:", pointsOrdres.map(p => p.originalIndex + 1));
+        
+        const coordinates = [[departLat, departLon]];
+        
+        pointsOrdres.forEach((point, orderIndex) => {
+            const lat = point.latitude;
+            const lon = point.longitude;
+            const coord = [lat, lon];
+            coordinates.push(coord);
+            
+            let markerColor = '#007bff';
+            let markerIcon = 'user';
+            
+            if (point.adresse && point.adresse.toLowerCase().includes('riadh')) {
+                markerColor = '#dc3545';
+                markerIcon = 'home';
+            } else if (point.adresse && point.adresse.toLowerCase().includes('ghodrane')) {
+                markerColor = '#fd7e14';
+                markerIcon = 'building';
+            } else if (point.adresse && point.adresse.toLowerCase().includes('sahloul')) {
+                markerColor = '#20c997';
+                markerIcon = 'hospital';
+            } else if (point.adresse && point.adresse.toLowerCase().includes('khezama')) {
+                markerColor = '#6f42c1';
+                markerIcon = 'location-dot';
+            }
+            
+            const marker = L.marker(coord, {
+                icon: L.divIcon({
+                    className: 'agent-marker',
+                    html: `
+                        <div style="
+                            background-color: ${markerColor}; 
+                            color: white; 
+                            width: 36px; 
+                            height: 36px; 
+                            border-radius: 50%; 
+                            display: flex; 
+                            align-items: center; 
+                            justify-content: center; 
+                            font-weight: bold; 
+                            border: 3px solid white; 
+                            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                            font-size: 14px;
+                        ">
+                            ${orderIndex + 1}
+                        </div>
+                    `,
+                    iconSize: [36, 36],
+                    iconAnchor: [18, 18]
+                })
+            }).addTo(map);
+            
+            markers.push(marker);
+            
+            const popupContent = `
+                <div style="width: 280px;">
+                    <div style="background: ${markerColor}; color: white; padding: 10px; border-radius: 5px 5px 0 0;">
+                        <h6 style="margin: 0; font-size: 0.95rem;">
+                            <i class="fas fa-${markerIcon}"></i> ÉTAPE ${orderIndex + 1}
+                        </h6>
+                    </div>
+                    <div style="padding: 12px;">
+                        <p style="margin: 0 0 8px 0; font-weight: bold; color: #2c3e50;">
+                            ${point.nom}
+                        </p>
+                        <p style="margin: 0 0 6px 0; font-size: 0.9em; color: #555;">
+                            <i class="fas fa-map-marker-alt"></i> ${point.adresse || 'Adresse non spécifiée'}
+                        </p>
+                        <p style="margin: 0 0 8px 0; font-size: 0.85em; color: #666;">
+                            <i class="fas fa-crosshairs"></i> ${lat.toFixed(6)}, ${lon.toFixed(6)}
+                        </p>
+                        <hr style="margin: 8px 0;">
+                        <button class="btn btn-sm btn-warning w-100" 
+                                onclick="corrigerCoordonneesAgent(${point.agent_id || point.id || 'null'}, '${point.nom.replace(/'/g, "\\'")}', '${point.adresse.replace(/'/g, "\\'")}', ${data.course_id})">
+                            <i class="fas fa-edit"></i> Corriger la position
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            marker.bindPopup(popupContent);
+        });
+        
+        if (coordinates.length > 1) {
+            const polyline = L.polyline(coordinates, {
+                color: '#007bff',
+                weight: 4,
+                opacity: 0.7,
+                dashArray: '10, 5',
+                lineCap: 'round'
+            }).addTo(map);
+            
+            markers.push(polyline);
+            
+            let distanceTotale = 0;
+            for (let i = 0; i < coordinates.length - 1; i++) {
+                const [lat1, lon1] = coordinates[i];
+                const [lat2, lon2] = coordinates[i + 1];
+                const dLat = lat2 - lat1;
+                const dLon = lon2 - lon1;
+                distanceTotale += Math.sqrt(dLat * dLat + dLon * dLon);
+            }
+            
+            const distanceKm = (distanceTotale * 111).toFixed(1);
+            console.log(`📏 Distance totale estimée: ${distanceKm} km`);
+            
+            const distanceElement = document.querySelector('#details-carte .bg-success h6');
+            if (distanceElement) {
+                distanceElement.textContent = `${distanceKm} km`;
+            }
+        }
+        
+        if (coordinates.length > 0) {
+            const bounds = L.latLngBounds(coordinates);
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
+        
+    } catch (error) {
+        console.error("💥 Erreur dans afficherPointsSurCarte:", error);
+    }
+}
+
+// Fonctions utilitaires pour la carte
+function clearMap() {
+    markers.forEach(marker => {
+        if (marker.remove) marker.remove();
+    });
+    markers = [];
+}
+
+function afficherErreurCarte(message) {
+    const detailsDiv = document.getElementById('details-carte');
+    detailsDiv.innerHTML = `
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>Erreur :</strong> ${message}
+        </div>
+    `;
+}
+
+function getCSRFToken() {
+    let token = '';
+    
+    // Chercher dans un input hidden
+    const csrfTokenInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (csrfTokenInput) {
+        token = csrfTokenInput.value;
+        console.log("🔐 CSRF token trouvé dans input hidden");
+        return token;
+    }
+    
+    // Chercher dans les cookies
+    const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrftoken='))
+        ?.split('=')[1];
+    
+    if (cookieValue) {
+        console.log("🔐 CSRF token trouvé dans les cookies");
+        return cookieValue;
+    }
+    
+    console.error("❌ CSRF token non trouvé !");
+    return '';
+}
+
+function showNotification(type, message) {
+    const toastHTML = `
+        <div class="toast show position-fixed top-0 end-0 m-3" style="z-index: 9999;">
+            <div class="toast-header bg-${type} text-white">
+                <i class="fas fa-${type === 'success' ? 'check' : 'info'}-circle me-2"></i>
+                <strong class="me-auto">Notification</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body">${message}</div>
+        </div>
+    `;
+    
+    const toastDiv = document.createElement('div');
+    toastDiv.innerHTML = toastHTML;
+    document.body.appendChild(toastDiv);
+    
+    setTimeout(() => toastDiv.remove(), 5000);
+}
+
+// Gestion des événements pour afficher la carte
+document.addEventListener('DOMContentLoaded', function() {
+    const mapElement = document.getElementById('map-course');
+    if (mapElement) {
+        mapElement.style.display = 'none';
+    }
+    
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.btn-voir-carte')) {
+            const courseId = e.target.closest('.btn-voir-carte').dataset.courseId;
+            
+            const sectionCarte = document.getElementById('section-carte');
+            sectionCarte.style.display = 'block';
+            
+            setTimeout(() => {
+                sectionCarte.scrollIntoView({ behavior: 'smooth' });
+            }, 10);
+            
+            setTimeout(() => {
+                afficherCourseSurCarte(courseId);
+            }, 100);
+        }
+    });
+    
+    // CORRECTION: Gestion du filtre de date
+    const btnFiltrer = document.getElementById('btn-filtrer-date');
+    if (btnFiltrer) {
+        btnFiltrer.addEventListener('click', function() {
+            const dateDebut = document.getElementById('date-debut').value;
+            const dateFin = document.getElementById('date-fin').value;
+            
+            if (dateDebut && dateFin) {
+                // Construire l'URL avec les paramètres de filtre
+                const url = new URL(window.location.href);
+                url.searchParams.set('date_debut', dateDebut);
+                url.searchParams.set('date_fin', dateFin);
+                window.location.href = url.toString();
+            } else {
+                alert('Veuillez sélectionner les deux dates');
+            }
+        });
+    }
+});
+
+// Fonctions pour l'admin
+function validerCourseAdmin(courseId) {
+    if (confirm('Voulez-vous valider cette course ?\n\nElle apparaîtra dans le rapport de paie.')) {
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+            alert('Erreur CSRF token. Veuillez rafraîchir la page.');
+            return;
+        }
+        
+        fetch(`/validation/valider-course/${courseId}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': csrfToken
+            },
+            body: 'notes=Validée par administrateur'
+        })
+        .then(response => {
+            if (response.ok) {
+                showNotification('success', 'Course validée avec succès !');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                throw new Error('Erreur lors de la validation');
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            showNotification('error', 'Erreur lors de la validation');
+        });
+    }
+}
+
+function refuserCourseAdmin(courseId) {
+    const notes = prompt('Pourquoi refusez-vous cette course ? (Optionnel)');
+    const csrfToken = getCSRFToken();
+    if (!csrfToken) {
+        alert('Erreur CSRF token. Veuillez rafraîchir la page.');
+        return;
+    }
+    
+    fetch(`/validation/refuser-course/${courseId}/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken
+        },
+        body: `notes=${encodeURIComponent(notes || 'Refusée par administrateur')}`
+    })
+    .then(response => {
+        if (response.ok) {
+            showNotification('info', 'Course refusée avec succès !');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            throw new Error('Erreur lors du refus');
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        showNotification('error', 'Erreur lors du refus');
+    });
+}
+
+// Ouvrir modal de modification
+function ouvrirModalModificationCourse(courseId) {
+    fetch(`/chauffeurs/api/course/${courseId}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('modal-course-id').value = data.course.id;
+                document.getElementById('modal-chauffeur').value = data.course.chauffeur_id;
+                document.getElementById('modal-heure').value = data.course.heure;
+                document.getElementById('modal-type-transport').value = data.course.type_transport;
+                document.getElementById('modal-jour').value = data.course.jour;
+                document.getElementById('modal-date-reelle').value = data.course.date_reelle;
+                let prixAffiche = '';
+                if (data.course.prix_total && data.course.prix_total > 0) {
+                    prixAffiche = data.course.prix_total;
+                } else if (data.course.prix && data.course.prix > 0) {
+                    prixAffiche = data.course.prix;
+                }
+                document.getElementById('modal-prix').value = prixAffiche;                document.getElementById('modal-notes').value = data.course.notes || '';
+                
+                const modal = new bootstrap.Modal(document.getElementById('modalModifierCourse'));
+                modal.show();
+            } else {
+                showNotification('error', 'Erreur lors du chargement de la course');
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            showNotification('error', 'Erreur de connexion');
+        });
+}
+
+// Gestion du redimensionnement
+window.addEventListener('resize', function() {
+    if (map) {
+        setTimeout(() => {
+            map.invalidateSize();
+        }, 150);
+    }
+});
+</script>
+
+<style>
+/* ===== STYLES POUR LA CARTE ===== */
+#map-course {
+    height: 500px;
+    width: 100%;
+    border-radius: 10px;
+    border: 2px solid #dee2e6;
+    margin-bottom: 20px;
+    min-height: 500px;
+}
+#loading-carte {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    padding: 40px;
+    text-align: center;
+    border: 2px solid #dee2e6;
+}
+
+.section-carte {
+    animation: slideIn 0.3s ease-out;
+    transition: all 0.3s ease;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 20px;
+    border: 1px solid #dee2e6;
+    display: block !important;
+}
+
+.btn-voir-carte {
+    transition: all 0.3s ease;
+    background: linear-gradient(135deg, #28a745, #20c997);
+    border: none;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 0.8rem;
+}
+
+.btn-voir-carte:hover {
+    background: linear-gradient(135deg, #20c997, #28a745);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Styles pour les selects */
+select.form-control {
+    color: #495057 !important;
+}
+
+select.form-control option {
+    color: #495057 !important;
+}
+
+select.form-control:disabled {
+    color: #6c757d !important;
+}
+
+select.form-control:disabled option {
+    color: #6c757d !important;
+}
+
+/* Styles pour les agents dans le formulaire */
+.agents-checklist {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 2px solid #dee2e6;
+    border-radius: 10px;
+    padding: 20px;
+    background: #fff;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.agent-item {
+    padding: 12px 15px;
+    margin-bottom: 10px;
+    border-left: 5px solid #007bff;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(0,123,255,0.1);
+}
+
+.agent-item:hover {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    transform: translateX(5px);
+    box-shadow: 0 4px 12px rgba(0,123,255,0.15);
+    border-color: #007bff;
+}
+
+.agent-principal {
+    border-left-color: #28a745;
+}
+
+.agent-secondaire {
+    border-left-color: #ffc107;
+}
+
+.category-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    border-radius: 8px;
+    background: #f8f9fa;
+}
+
+.principal {
+    border: 1px solid #d4edda;
+    background: #f8fff9;
+}
+
+.secondaire {
+    border: 1px solid #fff3cd;
+    background: #fffdf6;
+}
+
+/* Style pour le prix */
+.prix-course {
+    font-weight: bold;
+    color: #28a745;
+    background-color: #f8fff9;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #d4edda;
+}
+
+/* Style pour les filtres de date */
+.filtre-date-container {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #map-course {
+        height: 300px;
+    }
+    
+    .section-carte {
+        padding: 15px;
+    }
+    
+    .modal-xl {
+        max-width: 95%;
+        margin: 0.5rem auto;
+    }
+    
+    .filtre-date-container .row > div {
+        margin-bottom: 10px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- FILTRES DE DATE EN HAUT -->
+<div class="filtre-date-container">
+    <div class="row align-items-center">
+        <div class="col-md-8">
+            <h5 class="mb-3"><i class="fas fa-filter"></i> Filtrer par période</h5>
+            <div class="row">
+                <div class="col-md-5">
+                    <label class="form-label">Date de début</label>
+                    <input type="date" id="date-debut" class="form-control" 
+                           value="{{ date_debut|default:aujourd_hui_mois_debut }}">
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Date de fin</label>
+                    <input type="date" id="date-fin" class="form-control" 
+                           value="{{ date_fin|default:aujourd_hui_mois_fin }}">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" id="btn-filtrer-date">
+                        <i class="fas fa-search"></i> Filtrer
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-light">
+                <div class="card-body text-center">
+                    <h6 class="card-title mb-2">Total des prix</h6>
+                    <h3 class="text-success mb-0">
+                        {{ total_prix_courses|floatformat:2 }} TND
+                    </h3>
+                    <small class="text-muted">{{ courses|length }} course(s) trouvée(s)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- SECTION GAUCHE - FORMULAIRE -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0"><i class="fas fa-plus"></i> Nouvelle Affectation</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" id="affectationForm">
+                    {% csrf_token %}
+                    
+                    <!-- JOUR -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold h6">Jour *</label>
+                        <select id="id_jour" name="jour" class="form-control" required style="color: #495057;">
+                            <option value="">Sélectionner un jour</option>
+                            <option value="Lundi">Lundi</option>
+                            <option value="Mardi">Mardi</option>
+                            <option value="Mercredi">Mercredi</option>
+                            <option value="Jeudi">Jeudi</option>
+                            <option value="Vendredi">Vendredi</option>
+                            <option value="Samedi">Samedi</option>
+                            <option value="Dimanche">Dimanche</option>
+                        </select>
+                    </div>
+                    
+                    <!-- TYPE TRANSPORT -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold h6">Type Transport *</label>
+                        <select id="id_type_transport" name="type_transport" class="form-control" required style="color: #495057;">
+                            <option value="">Sélectionner le type</option>
+                            <option value="ramassage">Ramassage</option>
+                            <option value="depart">Départ</option>
+                        </select>
+                    </div>
+                    
+                    <!-- HEURE (dynamique) -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold h6">Heure *</label>
+                        <select id="id_heure" name="heure" class="form-control" required style="color: #495057;">
+                            <option value="">Sélectionner d'abord le type</option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Les heures apparaîtront après avoir sélectionné le type de transport
+                        </small>
+                    </div>
+                    
+                    <!-- CHAUFFEUR -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold h6">Chauffeur *</label>
+                        <select id="id_chauffeur" name="chauffeur" class="form-control" required style="color: #495057;">
+                            <option value="">Sélectionner un chauffeur</option>
+                            {% for chauffeur in chauffeurs_disponibles %}
+                            <option value="{{ chauffeur.id }}">{{ chauffeur.nom }} ({{ chauffeur.get_type_chauffeur_display }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <!-- AGENTS (dynamique) -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold h6">Agents *</label>
+                        <div id="agents-container">
+                            <div class="alert alert-info">
+                                <div class="text-center py-4">
+                                    <i class="fas fa-users fa-3x mb-3 text-primary"></i>
+                                    <h5>Agents du Planning</h5>
+                                    <p class="mb-0">
+                                        Les agents apparaîtront automatiquement<br>
+                                        après sélection du Jour, Type et Heure
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" name="agents" id="id_agents" value="">
+                    </div>
+                    
+                    <!-- PRIX (optionnel) -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold h6">Prix (TND)</label>
+                        <input type="number" name="prix" class="form-control" step="0.01" 
+                               placeholder="Ex: 25.50 (laisser vide pour calcul automatique)">
+                        <small class="form-text text-muted">
+                            Prix total de la course. Si vide, calculé automatiquement selon le type de chauffeur.
+                        </small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100 py-3 btn-lg">
+                        <i class="fas fa-plus-circle"></i> Créer l'Affectation
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- SECTION DROITE - LISTE DES COURSES ET CARTE -->
+    <div class="col-md-7">
+        <!-- SECTION CARTE (cachée par défaut) -->
+        <div id="section-carte" class="section-carte" style="display: none;">
+            <div class="card">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-map-marked-alt"></i> Visualisation et Correction des Positions
+                    </h6>
+                    <button type="button" class="btn btn-sm btn-light" onclick="document.getElementById('section-carte').style.display = 'none'">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="loading-carte" style="display: none;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <h5 class="mt-3">Chargement de la carte...</h5>
+                    </div>
+                    <div id="map-course"></div>
+                    <div id="details-carte"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- LISTE DES COURSES - CORRIGÉE -->
+<div class="card">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="fas fa-history"></i> Historique des Courses
+            <span class="badge bg-light text-dark ms-2">{{ courses|length }}</span>
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        {% if courses %}
+            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                <table class="table table-striped table-hover table-sm mb-0">
+                    <thead class="table-dark sticky-top">
+                        <tr>
+                            <th>Date</th>
+                            <th>Chauffeur</th>
+                            <th>Type</th>
+                            <th>Heure</th>
+                            <th>Agents</th>
+                            <th>Prix</th>  <!-- Colonne prix unique -->
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for course in courses %}
+                        <tr class="course-row">
+                            <td class="align-middle">
+                                <strong class="d-block">{{ course.date_reelle|date:"d/m/Y" }}</strong>
+                                <small class="text-muted">{{ course.jour }}</small>
+                            </td>
+                            <td class="align-middle">
+                                <strong class="d-block">{{ course.chauffeur.nom }}</strong>
+                                <span class="badge bg-secondary">
+                                    {{ course.chauffeur.get_type_chauffeur_display }}
+                                </span>
+                            </td>
+                            <td class="align-middle">
+                                <span class="badge {% if course.type_transport == 'ramassage' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+                                    {{ course.get_type_transport_display }}
+                                </span>
+                            </td>
+                            <td class="align-middle">
+                                <strong>{{ course.heure }}h</strong>
+                            </td>
+                            <td class="align-middle">
+                                <div class="d-flex align-items-center">
+                                    <span class="badge bg-info me-2">{{ course.affectation_set.count }}</span>
+                                    <button class="btn btn-sm btn-outline-info btn-voir-agents" 
+                                            type="button" 
+                                            data-bs-toggle="collapse" 
+                                            data-bs-target="#agents{{ course.id }}"
+                                            data-course-id="{{ course.id }}"
+                                            title="Voir les agents">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                                                       <button class="btn btn-sm btn-success btn-voir-carte"
+                                                    data-course-id="{{ course.id }}"
+                                                    title="Voir et corriger sur la carte">
+                                                <i class="fas fa-map-marked-alt"></i> 
+                                            </button>
+
+                                </div>
+                            </td>
+                            
+                            <!-- CORRECTION ICI : UN SEUL PRIX AFFICHÉ -->
+                            <td class="align-middle">
+                                <div class="prix-course">
+                                    {% if course.prix_total and course.prix_total > 0 %}
+                                        <!-- Si un prix personnalisé a été défini lors de l'affectation -->
+                                        <i class="fas fa-money-bill-wave"></i> {{ course.prix_total|floatformat:2 }} TND
+                                        <br>
+                                        <small class="text-muted">
+                                            <i class="fas fa-edit"></i> Prix personnalisé
+                                        </small>
+                                    {% else %}
+                                        <!-- Sinon, utiliser le prix par défaut du chauffeur ou du système -->
+                                        {% with prix_course=course.get_prix_course %}
+                                            <i class="fas fa-money-bill-wave"></i> {{ prix_course|floatformat:2 }} TND
+                                            <br>
+                                            <small class="text-muted">
+                                                <i class="fas fa-calculator"></i> Prix automatique
+                                            </small>
+                                        {% endwith %}
+                                    {% endif %}
+                                </div>
+                            </td>
+                            
+                            <td class="align-middle">
+                                {% if course.est_validee %}
+                                    <span class="badge bg-success" title="Validée">
+                                        <i class="fas fa-check"></i> Validée
+                                    </span>
+                                {% elif course.est_en_attente_validation %}
+                                    <span class="badge bg-warning" title="En attente">
+                                        <i class="fas fa-clock"></i> En attente
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary" title="Non validée">
+                                        <i class="fas fa-clock"></i> Non validée
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="align-middle">
+                                <div class="btn-group btn-group-sm">                                            <!-- Bouton Modifier (pour tous) -->
+                                            <button class="btn btn-warning btn-sm" 
+                                                    data-course-id="{{ course.id }}"
+                                                    onclick="ouvrirModalModificationCourse({{ course.id }})"
+                                                    title="Modifier la course">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            
+                                            <!-- Bouton Supprimer -->
+                                            <a href="{% url 'supprimer_course' course.id %}" 
+                                               class="btn btn-danger btn-sm" 
+                                               onclick="return confirm('Supprimer cette course et toutes ses affectations ?')"
+                                               title="Supprimer la course">
+                                                <i class="fas fa-trash"></i>
+                                            </a>
+                                            
+                                            <!-- Boutons ADMIN SEULEMENT pour le statut -->
+                                            {% if user.is_staff %}
+                                                {% if not course.est_validee and not course.est_en_attente_validation %}
+                                                    <button class="btn btn-success btn-sm" 
+                                                            onclick="validerCourseAdmin({{ course.id }})"
+                                                            title="Valider la course">
+                                                        <i class="fas fa-check"></i>
+                                                    </button>
+                                                {% elif course.est_en_attente_validation %}
+                                                    <button class="btn btn-success btn-sm" 
+                                                            onclick="validerCourseAdmin({{ course.id }})"
+                                                            title="Valider">
+                                                        <i class="fas fa-check"></i>
+                                                    </button>
+                                                    <button class="btn btn-danger btn-sm" 
+                                                            onclick="refuserCourseAdmin({{ course.id }})"
+                                                            title="Refuser">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr class="collapse" id="agents{{ course.id }}">
+                                    <td colspan="8" class="bg-light p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0 text-dark">
+                                                <i class="fas fa-users me-2"></i> 
+                                                Détail des agents ({{ course.affectation_set.count }})
+                                            </h6>
+                                            <button class="btn btn-sm btn-success btn-voir-carte"
+                                                    data-course-id="{{ course.id }}"
+                                                    title="Voir et corriger sur la carte">
+                                                <i class="fas fa-map-marked-alt"></i> Voir et corriger
+                                            </button>
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            {% for affectation in course.affectation_set.all %}
+                                            <div class="agent-badge bg-white text-dark border rounded p-2 d-flex align-items-center">
+                                                <div class="me-2">
+                                                    <strong class="d-block">{{ affectation.agent.nom }}</strong>
+                                                    <small class="text-muted">{{ affectation.agent.get_societe_display }}</small>
+                                                    <br>
+                                                    <small>{{ affectation.agent.adresse|truncatewords:3 }}</small>
+                                                </div>
+                                                <a href="{% url 'supprimer_affectation' affectation.id %}" 
+                                                   class="text-danger ms-2" 
+                                                   onclick="return confirm('Supprimer l\\'affectation de {{ affectation.agent.nom }} ?')"
+                                                   title="Supprimer l'affectation">
+                                                    <i class="fas fa-times"></i>
+                                                </a>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <div class="text-muted">
+                            <i class="fas fa-car fa-3x mb-3"></i>
+                            <h5>
+                                {% if request.GET.date_debut and request.GET.date_fin %}
+                                    Aucune course trouvée pour la période du {{ request.GET.date_debut }} au {{ request.GET.date_fin }}
+                                {% else %}
+                                    Aucune course enregistrée
+                                {% endif %}
+                            </h5>
+                            <p>Créez votre première affectation.</p>
+                            {% if request.GET.date_debut and request.GET.date_fin %}
+                            <a href="{% url 'chauffeurs' %}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-times"></i> Effacer le filtre
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de modification de course -->
+<div class="modal fade" id="modalModifierCourse" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit"></i> Modifier la course
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formModifierCourse">
+                    <input type="hidden" id="modal-course-id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Chauffeur</label>
+                        <select id="modal-chauffeur" class="form-control">
+                            {% for chauffeur in chauffeurs_disponibles %}
+                            <option value="{{ chauffeur.id }}">{{ chauffeur.nom }} ({{ chauffeur.get_type_chauffeur_display }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Heure</label>
+                            <input type="number" id="modal-heure" class="form-control" min="0" max="23">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Type Transport</label>
+                            <select id="modal-type-transport" class="form-control">
+                                <option value="ramassage">Ramassage</option>
+                                <option value="depart">Départ</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Jour</label>
+                            <select id="modal-jour" class="form-control">
+                                <option value="Lundi">Lundi</option>
+                                <option value="Mardi">Mardi</option>
+                                <option value="Mercredi">Mercredi</option>
+                                <option value="Jeudi">Jeudi</option>
+                                <option value="Vendredi">Vendredi</option>
+                                <option value="Samedi">Samedi</option>
+                                <option value="Dimanche">Dimanche</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Date réelle</label>
+                            <input type="date" id="modal-date-reelle" class="form-control">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Prix (TND)</label>
+                        <input type="number" id="modal-prix" class="form-control" step="0.01">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea id="modal-notes" class="form-control" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Annuler
+                </button>
+                <button type="button" class="btn btn-primary" id="btn-sauvegarder-modification">
+                    <i class="fas fa-save"></i> Sauvegarder
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Gestion du modal de modification
+document.addEventListener('DOMContentLoaded', function() {
+    const btnSauvegarder = document.getElementById('btn-sauvegarder-modification');
+    if (btnSauvegarder) {
+        btnSauvegarder.addEventListener('click', function() {
+            const courseId = document.getElementById('modal-course-id').value;
+            const data = {
+                chauffeur_id: document.getElementById('modal-chauffeur').value,
+                heure: document.getElementById('modal-heure').value,
+                type_transport: document.getElementById('modal-type-transport').value,
+                jour: document.getElementById('modal-jour').value,
+                date_reelle: document.getElementById('modal-date-reelle').value,
+                prix: document.getElementById('modal-prix').value,
+                notes: document.getElementById('modal-notes').value
+            };
+            
+            fetch(`/chauffeurs/api/modifier_course/${courseId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    showNotification('success', 'Course modifiée avec succès !');
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('modalModifierCourse'));
+                    modal.hide();
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showNotification('error', 'Erreur: ' + result.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                showNotification('error', 'Erreur de connexion');
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

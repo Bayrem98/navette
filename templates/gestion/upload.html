@@ -1,0 +1,492 @@
+{% extends 'gestion/base.html' %}
+
+{% block page_title %}Charger Fichiers{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0"><i class="fas fa-upload"></i> Charger le Planning</h5>
+                {% if request.session.planning_charge %}
+                <span class="badge bg-success">
+                    <i class="fas fa-check-circle"></i> Planning chargé
+                </span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+  <!-- Afficher le fichier uploadé s'il existe -->
+{% if uploaded_file %}
+<div class="card mb-4 border-success">
+    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <h6 class="card-title mb-0">
+            <i class="fas fa-file-excel"></i> Fichier uploadé avec succès
+        </h6>
+        <span class="badge bg-light text-dark">
+            <i class="fas fa-check-circle"></i> Prêt
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <table class="table table-sm">
+                    <tr>
+                        <th width="40%">Nom du fichier :</th>
+                        <td><strong>{{ uploaded_file.name }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th>Taille :</th>
+                        <td>{{ uploaded_file.size|filesizeformat }}</td>
+                    </tr>
+                    <tr>
+                        <th>Type :</th>
+                        <td>{{ uploaded_file.content_type }}</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <table class="table table-sm">
+                    <tr>
+                        <th width="40%">Lignes détectées :</th>
+                        <td><span class="badge bg-info">{{ uploaded_file.row_count }}</span></td>
+                    </tr>
+                    <tr>
+                        <th>Uploadé le :</th>
+                        <td>
+                            {% with uploaded_file.upload_time|slice:":19" as upload_time %}
+                            {{ upload_time|date:"d/m/Y H:i" }}
+                            {% endwith %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Statut :</th>
+                        <td>
+                            {% if planning_charge %}
+                            <span class="badge bg-success">Planning chargé</span>
+                            {% else %}
+                            <span class="badge bg-warning">En attente de chargement</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="mt-3">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <strong>Prochaine étape :</strong> 
+                <a href="{% url 'liste_transports' %}" class="alert-link">Voir la liste des transports</a>
+                pour commencer les affectations.
+            </div>
+            
+            <div class="d-flex gap-2">
+                <a href="{% url 'liste_transports' %}" class="btn btn-success">
+                    <i class="fas fa-list"></i> Voir les transports
+                </a>
+                <a href="{% url 'chauffeurs' %}" class="btn btn-primary">
+                    <i class="fas fa-users"></i> Affecter des chauffeurs
+                </a>
+                <form method="post" action="{% url 'upload' %}" style="display:inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="clear_file">
+                    <button type="submit" class="btn btn-danger" 
+                            onclick="return confirm('Supprimer le fichier uploadé ?')">
+                        <i class="fas fa-trash"></i> Supprimer
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-info-circle"></i> Instructions :</h6>
+                    <ul class="mb-0">
+                        <li>Téléchargez le fichier <strong>EMS.xlsx</strong> contenant le planning des agents</li>
+                        <li>Le système chargera automatiquement le fichier <strong>info.xlsx</strong> s'il existe</li>
+                        <li>Format requis : colonnes [Salarié, Lundi, Mardi, ..., Dimanche, Qualification]</li>
+                    </ul>
+                </div>
+
+                <!-- Section upload -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-cloud-upload-alt"></i> Upload du fichier
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <form method="post" enctype="multipart/form-data" id="uploadForm">
+                            {% csrf_token %}
+                            
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">
+                                    <i class="fas fa-file-excel text-success"></i> Fichier de Planning (EMS.xlsx) *
+                                </label>
+                                <div class="input-group">
+                                    <input type="file" name="fichier_planning" class="form-control" 
+                                           id="fileInput" accept=".xlsx,.xls" required>
+                                    <button class="btn btn-outline-secondary" type="button" 
+                                            onclick="document.getElementById('fileInput').value=''">
+                                        <i class="fas fa-times"></i> Effacer
+                                    </button>
+                                </div>
+                                <div class="form-text">
+                                    Format Excel (.xlsx, .xls) - maximum 10MB
+                                </div>
+                            </div>
+
+                            <!-- Aperçu du fichier -->
+                            <div id="filePreview" class="mb-3" style="display: none;">
+                                <h6><i class="fas fa-eye"></i> Aperçu du fichier :</h6>
+                                <div class="alert alert-light border">
+                                    <div id="fileDetails"></div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg py-3">
+                                    <i class="fas fa-upload"></i> Charger le Planning
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Fichiers de test disponibles -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-download"></i> Fichiers de Test
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <div class="card border-success">
+                                    <div class="card-body">
+                                        <h6><i class="fas fa-calendar-alt text-success"></i> EMS.xlsx</h6>
+                                        <p class="mb-2">Planning des agents avec horaires</p>
+                                        <small class="text-muted">Format de test disponible</small>
+                                        <div class="mt-2">
+                                            <a href="#" class="btn btn-sm btn-outline-success" 
+                                               onclick="downloadTestFile('ems')">
+                                                <i class="fas fa-download"></i> Télécharger
+                                            </a>
+                                            <button class="btn btn-sm btn-outline-info" 
+                                                    onclick="showSample('ems')">
+                                                <i class="fas fa-eye"></i> Voir format
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="card border-info">
+                                    <div class="card-body">
+                                        <h6><i class="fas fa-users text-info"></i> info.xlsx</h6>
+                                        <p class="mb-2">Informations des agents</p>
+                                        <small class="text-muted">Données de test disponibles</small>
+                                        <div class="mt-2">
+                                            <a href="#" class="btn btn-sm btn-outline-info" 
+                                               onclick="downloadTestFile('info')">
+                                                <i class="fas fa-download"></i> Télécharger
+                                            </a>
+                                            <button class="btn btn-sm btn-outline-secondary" 
+                                                    onclick="showSample('info')">
+                                                <i class="fas fa-eye"></i> Voir format
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Workflow -->
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h6 class="card-title mb-0"><i class="fas fa-sitemap"></i> Étapes Suivantes</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-3">
+                                <div class="step">
+                                    <span class="step-number">1</span>
+                                    <h6>Upload Planning</h6>
+                                    <small class="text-muted">Fichier EMS.xlsx</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="step">
+                                    <span class="step-number">2</span>
+                                    <h6>Vérifier Transports</h6>
+                                    <small class="text-muted">Liste des agents</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="step">
+                                    <span class="step-number">3</span>
+                                    <h6>Affecter Chauffeurs</h6>
+                                    <small class="text-muted">Créer des courses</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="step">
+                                    <span class="step-number">4</span>
+                                    <h6>Générer Rapports</h6>
+                                    <small class="text-muted">PDF, cartes, paiements</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-center mt-4">
+                            <a href="{% url 'liste_transports' %}" class="btn btn-success me-2">
+                                <i class="fas fa-list"></i> Voir la liste des transports
+                            </a>
+                            <a href="{% url 'index' %}" class="btn btn-secondary">
+                                <i class="fas fa-home"></i> Retour à l'accueil
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour afficher le format -->
+<div class="modal fade" id="sampleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sampleModalTitle">Format du fichier</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="sampleModalBody">
+                <!-- Contenu dynamique -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.step {
+    padding: 15px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.step:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+.step-number {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+#fileInput:valid {
+    border-color: #28a745;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right calc(0.375em + 0.1875rem) center;
+    background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+</style>
+
+<script>
+// Afficher l'aperçu du fichier sélectionné
+document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = this.files[0];
+    const preview = document.getElementById('filePreview');
+    const details = document.getElementById('fileDetails');
+    
+    if (file) {
+        preview.style.display = 'block';
+        details.innerHTML = `
+            <div class="row">
+                <div class="col-6">
+                    <strong>Nom :</strong> ${file.name}
+                </div>
+                <div class="col-6">
+                    <strong>Taille :</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB
+                </div>
+                <div class="col-6">
+                    <strong>Type :</strong> ${file.type || 'application/vnd.ms-excel'}
+                </div>
+                <div class="col-6">
+                    <strong>Dernière modification :</strong> ${new Date(file.lastModified).toLocaleDateString()}
+                </div>
+            </div>
+            <div class="mt-2">
+                <span class="badge bg-info">Format Excel détecté</span>
+                <span class="badge bg-warning">Planning horaires</span>
+            </div>
+        `;
+    } else {
+        preview.style.display = 'none';
+    }
+});
+
+// Fonctions pour les fichiers de test
+function downloadTestFile(type) {
+    const filename = type === 'ems' ? 'EMS.xlsx' : 'info.xlsx';
+    alert(`Téléchargement du fichier ${filename} de test`);
+    // Dans la vraie application, rediriger vers le fichier de test
+    // window.location.href = `/static/test_files/${filename}`;
+}
+
+function showSample(type) {
+    const modal = new bootstrap.Modal(document.getElementById('sampleModal'));
+    const title = document.getElementById('sampleModalTitle');
+    const body = document.getElementById('sampleModalBody');
+    
+    if (type === 'ems') {
+        title.textContent = 'Format EMS.xlsx';
+        body.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <thead class="table-success">
+                        <tr>
+                            <th>Salarié</th>
+                            <th>Lundi</th>
+                            <th>Mardi</th>
+                            <th>Mercredi</th>
+                            <th>Jeudi</th>
+                            <th>Vendredi</th>
+                            <th>Samedi</th>
+                            <th>Dimanche</th>
+                            <th>Qualification</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Nom Complet Agent</td>
+                            <td>8h-16h</td>
+                            <td>8h-16h</td>
+                            <td>REPOS</td>
+                            <td>8h-16h</td>
+                            <td>8h-16h</td>
+                            <td>8h-16h</td>
+                            <td>REPOS</td>
+                            <td>Téléconseiller</td>
+                        </tr>
+                        <tr>
+                            <td>Autre Agent</td>
+                            <td>13h-22h</td>
+                            <td>13h-22h</td>
+                            <td>REPOS</td>
+                            <td>13h-22h</td>
+                            <td>13h-22h</td>
+                            <td>13h-22h</td>
+                            <td>REPOS</td>
+                            <td>Téléconseiller</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="alert alert-info mt-3">
+                <strong>Format requis :</strong>
+                <ul class="mb-0">
+                    <li>Colonne "Salarié" : Nom complet de l'agent</li>
+                    <li>Colonnes jours (Lundi à Dimanche) : Horaires (ex: "8h-16h", "13h-22h", "REPOS")</li>
+                    <li>Colonne "Qualification" : Poste de l'agent</li>
+                </ul>
+            </div>
+        `;
+    } else {
+        title.textContent = 'Format info.xlsx';
+        body.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <thead class="table-info">
+                        <tr>
+                            <th>voyant</th>
+                            <th>adresse</th>
+                            <th>Mobile</th>
+                            <th>societe</th>
+                            <th>voiture</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Nom Complet Agent</td>
+                            <td>Adresse complète, Ville</td>
+                            <td>01234567</td>
+                            <td>Nom de la société</td>
+                            <td>non</td>
+                        </tr>
+                        <tr>
+                            <td>Autre Agent</td>
+                            <td>Autre adresse, Ville</td>
+                            <td>98765432</td>
+                            <td>Autre société</td>
+                            <td>oui</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="alert alert-info mt-3">
+                <strong>Format requis :</strong>
+                <ul class="mb-0">
+                    <li>Colonne "voyant" : Nom de l'agent (doit correspondre à EMS.xlsx)</li>
+                    <li>Colonne "adresse" : Adresse complète pour géolocalisation</li>
+                    <li>Colonne "Mobile" : Numéro de téléphone</li>
+                    <li>Colonne "societe" : Nom de la société</li>
+                    <li>Colonne "voiture" : "oui" ou "non" (voiture personnelle)</li>
+                </ul>
+            </div>
+        `;
+    }
+    
+    modal.show();
+}
+
+// Validation du formulaire
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    const fileInput = document.getElementById('fileInput');
+    if (!fileInput.files.length) {
+        e.preventDefault();
+        alert('Veuillez sélectionner un fichier Excel');
+        fileInput.focus();
+        return false;
+    }
+    
+    const file = fileInput.files[0];
+    const validTypes = [
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    
+    if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
+        e.preventDefault();
+        alert('Veuillez sélectionner un fichier Excel valide (.xlsx, .xls)');
+        return false;
+    }
+    
+    if (file.size > 10 * 1024 * 1024) { // 10MB
+        e.preventDefault();
+        alert('Le fichier est trop volumineux (max 10MB)');
+        return false;
+    }
+    
+    // Afficher un indicateur de chargement
+    const submitBtn = this.querySelector('button[type="submit"]');
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+    submitBtn.disabled = true;
+});
+</script>
+{% endblock %}

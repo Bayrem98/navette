@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon Profil - Chauffeur</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .back-btn {
+            background: rgba(255,255,255,0.15);
+            border: 2px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+        
+        .back-btn:hover {
+            background: rgba(255,255,255,0.25);
+            transform: translateY(-2px);
+        }
+        
+        .main-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        .profile-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        @media (max-width: 768px) {
+            .profile-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .profile-sidebar {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            text-align: center;
+            position: sticky;
+            top: 30px;
+            height: fit-content;
+        }
+        
+        .profile-avatar {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            color: white;
+            border: 5px solid white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .profile-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .profile-role {
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding: 5px 15px;
+            background: #f0f4ff;
+            border-radius: 20px;
+            display: inline-block;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+        
+        .status-active {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        .status-inactive {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .profile-main {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        }
+        
+        .section-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f4ff;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .section-title i {
+            color: #667eea;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .info-card {
+            background: #f8f9ff;
+            border-radius: 10px;
+            padding: 25px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .info-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.1);
+        }
+        
+        .info-label {
+            color: #666;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .info-value {
+            color: #333;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 25px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 36px;
+            font-weight: 800;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+        
+        .action-card {
+            background: white;
+            border: 2px solid #f0f4ff;
+            border-radius: 10px;
+            padding: 25px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            color: inherit;
+        }
+        
+        .action-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.15);
+        }
+        
+        .action-icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+        
+        .action-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .action-desc {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: #666;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .password-section {
+            background: #fff8e1;
+            border-radius: 10px;
+            padding: 25px;
+            margin-top: 40px;
+        }
+        
+        .password-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .form-group input {
+            padding: 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #f0f4ff;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+        
+        .btn-secondary:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .change-password-btn {
+            align-self: flex-end;
+        }
+        
+        @media (max-width: 768px) {
+            .password-form {
+                grid-template-columns: 1fr;
+            }
+            
+            .change-password-btn {
+                align-self: stretch;
+            }
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        
+        .modal-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            justify-content: flex-end;
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <a href="/mobile/dashboard/" class="back-btn">
+                ← Retour au dashboard
+            </a>
+            <h2>👤 Mon Profil</h2>
+            <div style="width: 100px;"></div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="profile-container">
+            <!-- Sidebar avec photo et info basique -->
+            <div class="profile-sidebar">
+                <div class="profile-avatar" id="profileAvatar">
+                    🚕
+                </div>
+                <h2 class="profile-name" id="profileName">Chargement...</h2>
+                <div class="profile-role" id="profileRole">Chauffeur</div>
+                <div class="status-badge status-active" id="profileStatus">
+                    ● Actif
+                </div>
+                
+            </div>
+            
+            <!-- Contenu principal -->
+            <div class="profile-main">
+                <!-- Section Informations personnelles -->
+                <div class="section-title">
+                    📋 Informations personnelles
+                </div>
+                
+                <div id="infoSection">
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        <p>Chargement des informations...</p>
+                    </div>
+                </div>
+                
+                <!-- Section Statistiques -->
+                <div class="section-title">
+                    📊 Mes Statistiques
+                </div>
+                
+                <div id="statsSection">
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        <p>Chargement des statistiques...</p>
+                    </div>
+                </div>
+                
+                <!-- Section Changement de mot de passe -->
+                <div class="password-section">
+                    <div class="section-title">
+                        🔒 Sécurité
+                    </div>
+                    
+                    <div class="password-form">
+                        <div class="form-group">
+                            <label for="currentPassword">Mot de passe actuel</label>
+                            <input type="password" id="currentPassword" placeholder="Entrez votre mot de passe actuel">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="newPassword">Nouveau mot de passe</label>
+                            <input type="password" id="newPassword" placeholder="Nouveau mot de passe (min. 6 caractères)">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="confirmPassword">Confirmer</label>
+                            <input type="password" id="confirmPassword" placeholder="Confirmez le nouveau mot de passe">
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-primary change-password-btn" onclick="changePassword()">
+                        🔐 Changer le mot de passe
+                    </button>
+                </div>
+                
+                <!-- Section Actions rapides -->
+                <div class="section-title">
+                    ⚡ Actions rapides
+                </div>
+                
+                <div class="actions-grid">
+                    <a href="/mobile/dashboard/" class="action-card">
+                        <div class="action-icon">📱</div>
+                        <div class="action-title">Dashboard</div>
+                        <div class="action-desc">Retour au tableau de bord</div>
+                    </a>
+                    
+                    <a href="/mobile/historique/" class="action-card">
+                        <div class="action-icon">📊</div>
+                        <div class="action-title">Historique complet</div>
+                        <div class="action-desc">Voir toutes mes courses</div>
+                    </a>
+                    
+                    <div class="action-card" onclick="exportData()">
+                        <div class="action-icon">📤</div>
+                        <div class="action-title">Exporter données</div>
+                        <div class="action-desc">Télécharger mon historique</div>
+                    </div>
+                    
+                    <div class="action-card" onclick="contactSupport()">
+                        <div class="action-icon">📞</div>
+                        <div class="action-title">Support</div>
+                        <div class="action-desc">Contacter l'administration</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal d'édition -->
+    <div class="modal" id="editModal">
+        <div class="modal-content">
+            <div class="modal-title">✏️ Modifier le profil</div>
+            
+            <div class="form-group">
+                <label for="editNom">Nom complet</label>
+                <input type="text" id="editNom" placeholder="Votre nom">
+            </div>
+            
+            <div class="form-group">
+                <label for="editTelephone">Téléphone</label>
+                <input type="tel" id="editTelephone" placeholder="Votre numéro">
+            </div>
+            
+            <div class="form-group">
+                <label for="editVehicule">Véhicule</label>
+                <input type="text" id="editVehicule" placeholder="Modèle et plaque">
+            </div>
+            
+            <div class="form-group">
+                <label for="editAdresse">Adresse</label>
+                <input type="text" id="editAdresse" placeholder="Votre adresse">
+            </div>
+            
+            <div class="form-group">
+                <label for="editEmail">Email</label>
+                <input type="email" id="editEmail" placeholder="votre@email.com">
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeEditModal()">
+                    Annuler
+                </button>
+                <button class="btn btn-primary" onclick="saveProfileChanges()">
+                    💾 Enregistrer
+                </button>
+            </div>
+        </div>
+    </div>
+
+<script>
+console.log("=== PROFIL JS DÉMARRÉ ===");
+
+// 1. Vérifier que les fonctions de base existent
+function openEditModal() {
+    console.log("Modal ouvert");
+    document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+function saveProfileChanges() {
+    alert('✅ Modifications enregistrées');
+    closeEditModal();
+}
+
+async function changePassword() {
+    console.log("🔄 Début changement mot de passe...");
+    
+    const currentPassword = document.getElementById('currentPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    
+    console.log("🔑 Champs:", { 
+        current: currentPassword ? '***' : 'vide', 
+        new: newPassword ? '***' : 'vide',
+        confirm: confirmPassword ? '***' : 'vide' 
+    });
+    
+    // Validation côté client
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        alert('❌ Tous les champs sont requis');
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        alert('❌ Les nouveaux mots de passe ne correspondent pas');
+        return;
+    }
+    
+    if (newPassword.length < 8) {
+        alert('❌ Le mot de passe doit faire au moins 8 caractères');
+        return;
+    }
+    
+    if (!/\d/.test(newPassword)) {
+        alert('❌ Le mot de passe doit contenir au moins un chiffre (0-9)');
+        return;
+    }
+    
+    if (!/[a-zA-Z]/.test(newPassword)) {
+        alert('❌ Le mot de passe doit contenir au moins une lettre');
+        return;
+    }
+    
+    // Confirmation
+    if (!confirm('⚠️ Après le changement, vous serez déconnecté de tous vos appareils. Continuer ?')) {
+        return;
+    }
+    
+    try {
+        // Afficher chargement
+        const btn = document.querySelector('.change-password-btn');
+        const originalText = btn.textContent;
+        btn.textContent = '⏳ En cours...';
+        btn.disabled = true;
+        
+        // IMPORTANT: Appel API CORRECT
+        console.log("📡 Appel API: /mobile/api/profile/change-password/");
+        const response = await fetch('/mobile/api/profile/change-password/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                current_password: currentPassword,
+                new_password: newPassword,
+                confirm_password: confirmPassword
+            })
+        });
+        
+        const data = await response.json();
+        console.log("📦 Réponse API:", data);
+        
+        // Restaurer bouton
+        btn.textContent = originalText;
+        btn.disabled = false;
+        
+        if (data.success) {
+            alert('✅ ' + data.message);
+            
+            // Vider champs
+            document.getElementById('currentPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+            
+            // REDIRECTION FORCÉE
+            if (data.redirect_to_login || data.logout_forced) {
+                setTimeout(() => {
+                    alert('🔒 Redirection vers la page de connexion...');
+                    window.location.href = '/mobile/login/';
+                }, 1500);
+            }
+        } else {
+            alert('❌ ' + data.error);
+        }
+        
+    } catch (error) {
+        console.error('❌ Erreur réseau:', error);
+        alert('❌ Erreur de connexion au serveur');
+        
+        // Restaurer bouton
+        const btn = document.querySelector('.change-password-btn');
+        btn.textContent = '🔐 Changer le mot de passe';
+        btn.disabled = false;
+    }
+}
+// Fonction pour récupérer le token CSRF
+function getCsrfToken() {
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+function exportData() {
+    alert('📤 Export disponible prochainement');
+}
+
+function contactSupport() {
+    alert('📞 Contact: support@transport.com');
+}
+
+// 2. Fonction principale de chargement
+async function loadProfileData() {
+    console.log("1. Début chargement...");
+    
+    try {
+        // Appel API
+        console.log("2. Appel API profile...");
+        const response = await fetch('/mobile/api/profile/');
+        console.log("3. Status:", response.status);
+        
+        const data = await response.json();
+        console.log("4. Données brutes:", data);
+        
+        if (data.success) {
+            console.log("5. Succès, affichage...");
+            displayProfile(data);
+        } else {
+            console.error("6. Erreur API:", data.error);
+            showError(data.error);
+        }
+        
+    } catch (error) {
+        console.error("7. Erreur catch:", error);
+        showError('Erreur réseau: ' + error.message);
+    }
+}
+
+// 3. Afficher les données
+function displayProfile(data) {
+    console.log("Affichage données:", data);
+    
+    const profile = data.profile || {};
+    const stats = data.stats || {};
+    
+    // Avatar
+    if (profile.nom) {
+        const names = profile.nom.split(' ');
+        const first = names[0] ? names[0].charAt(0) : 'C';
+        const second = names[1] ? names[1].charAt(0) : names[0] ? names[0].charAt(1) : 'H';
+        document.getElementById('profileAvatar').textContent = first + second;
+    }
+    
+    // Informations de base
+    document.getElementById('profileName').textContent = profile.nom || 'Chauffeur';
+    
+    // Statut
+    const statusEl = document.getElementById('profileStatus');
+    if (profile.actif === true || profile.actif === 'true') {
+        statusEl.className = 'status-badge status-active';
+        statusEl.textContent = '● Actif';
+    } else {
+        statusEl.className = 'status-badge status-inactive';
+        statusEl.textContent = '● Inactif';
+    }
+    
+    // Remplir les informations
+    document.getElementById('infoSection').innerHTML = `
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="info-label">📞 Téléphone</div>
+                <div class="info-value">${profile.telephone || 'Non spécifié'}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">🚗 Véhicule</div>
+                <div class="info-value">${profile.vehicule || profile.numero_voiture || 'Non spécifié'}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">🏷️ Type</div>
+                <div class="info-value">${formatType(profile.type_chauffeur)}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">📅 Inscription</div>
+                <div class="info-value">${profile.date_inscription || profile.created_at || 'N/A'}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">📍 Adresse</div>
+                <div class="info-value">${profile.adresse || 'Non spécifiée'}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">📧 Email</div>
+                <div class="info-value">${profile.email || 'Non spécifié'}</div>
+            </div>
+        </div>
+    `;
+    
+    // Statistiques
+    document.getElementById('statsSection').innerHTML = `
+       <div id="statsSection">
+           <div class="stats-grid">
+               <div class="stat-card">
+                   <div class="stat-value">${stats.total_courses || 0}</div>
+                   <div class="stat-label">Courses totales</div>
+               </div>
+               <div class="stat-card">
+                   <div class="stat-value">${stats.courses_validees || 0}</div>
+                   <div class="stat-label">Courses validées</div>
+               </div>
+        
+               <!-- REVENU - UNIQUEMENT POUR SUPER CHAUFFEUR -->
+               <div class="stat-card" id="revenuStatCard" style="display: none;">
+                   <div class="stat-value">${stats.revenu_total || 0} DNT</div>
+                   <div class="stat-label">Revenu total</div>
+               </div>
+        
+               <!-- Statistique alternative -->
+               <div class="stat-card" id="normalStatCard">
+                   <div class="stat-value">${stats.courses_validees || 0}</div>
+                   <div class="stat-label">Taux validation</div>
+               </div>
+           </div>
+       </div>
+    `;
+    
+    // Remplir le modal
+    document.getElementById('editNom').value = profile.nom || '';
+    document.getElementById('editTelephone').value = profile.telephone || '';
+    document.getElementById('editVehicule').value = profile.vehicule || profile.numero_voiture || '';
+    document.getElementById('editAdresse').value = profile.adresse || '';
+    document.getElementById('editEmail').value = profile.email || '';
+}
+
+// 4. Formater le type
+function formatType(type) {
+    const types = {
+        'taxi': 'Taxi',
+        'prive': 'Privé',
+        'vip': 'VIP',
+        'standard': 'Standard'
+    };
+    return types[type] || type || 'Non spécifié';
+}
+
+// 5. Afficher une erreur
+function showError(message) {
+    document.getElementById('infoSection').innerHTML = `
+        <div class="error">
+            <p>❌ ${message}</p>
+            <button onclick="loadProfileData()" style="margin-top: 10px; padding: 8px 15px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                🔄 Réessayer
+            </button>
+        </div>
+    `;
+}
+
+// 6. Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("✅ DOM chargé, démarrage...");
+    
+    // Fermer modal en cliquant dehors
+    document.getElementById('editModal').addEventListener('click', function(e) {
+        if (e.target === this) closeEditModal();
+    });
+    
+    // Charger les données après 500ms (s'assurer que tout est prêt)
+    setTimeout(() => {
+        console.log("⏳ Démarrage du chargement...");
+        loadProfileData();
+    }, 500);
+});
+
+console.log("=== PROFIL JS TERMINÉ ===");
+</script>
+</body>
+</html>

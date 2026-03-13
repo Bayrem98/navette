@@ -1,0 +1,151 @@
+{% extends 'gestion/base.html' %}
+
+{% block page_title %}Rapport d'Optimisation{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line"></i> Rapport d'Optimisation
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if dernier_rapport %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    Dernier rapport généré le : {{ dernier_rapport.timestamp }}
+                </div>
+                
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="card-title mb-0">Résumé de l'optimisation</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <div class="card bg-primary text-white text-center mb-3">
+                                            <div class="card-body">
+                                                <h4>{{ dernier_rapport.distance_totale }} km</h4>
+                                                <p class="mb-0">Distance totale</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="card bg-success text-white text-center mb-3">
+                                            <div class="card-body">
+                                                <h4>{{ dernier_rapport.nombre_agents }}</h4>
+                                                <p class="mb-0">Agents</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="card bg-warning text-white text-center mb-3">
+                                            <div class="card-body">
+                                                <h4>{{ dernier_rapport.temps_estime }} min</h4>
+                                                <p class="mb-0">Temps estimé</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="card bg-danger text-white text-center mb-3">
+                                            <div class="card-body">
+                                                <h4>{{ dernier_rapport.economie_estimee }} DNT</h4>
+                                                <p class="mb-0">Économie</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if dernier_rapport.carte_url %}
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-map"></i> Carte de l'itinéraire
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <iframe src="{{ dernier_rapport.carte_url }}" 
+                                        style="width: 100%; height: 500px; border: none; border-radius: 8px;"></iframe>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header bg-secondary text-white">
+                                <h6 class="card-title mb-0">Détail de l'itinéraire</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Ordre</th>
+                                                <th>Agent</th>
+                                                <th>Adresse</th>
+                                                <th>Société</th>
+                                                <th>Téléphone</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for point in dernier_rapport.itineraire %}
+                                            <tr>
+                                                <td><span class="badge bg-primary">{{ point.ordre }}</span></td>
+                                                <td><strong>{{ point.nom }}</strong></td>
+                                                <td><small>{{ point.adresse }}</small></td>
+                                                <td><span class="badge bg-info">{{ point.societe }}</span></td>
+                                                <td>{{ point.telephone }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mt-4">
+                    <div class="col-md-12 text-center">
+                        <a href="{% url 'carte' %}" class="btn btn-primary me-2">
+                            <i class="fas fa-redo"></i> Nouvelle optimisation
+                        </a>
+                        <button onclick="window.print()" class="btn btn-success me-2">
+                            <i class="fas fa-print"></i> Imprimer le rapport
+                        </button>
+                        <a href="{{ dernier_rapport.carte_url }}" target="_blank" class="btn btn-info">
+                            <i class="fas fa-expand"></i> Voir carte en plein écran
+                        </a>
+                    </div>
+                </div>
+                
+                {% else %}
+                <div class="text-center py-5">
+                    <div class="text-muted">
+                        <i class="fas fa-route fa-3x mb-3"></i>
+                        <h5>Aucun rapport disponible</h5>
+                        <p>Générez votre premier rapport d'optimisation depuis la page Cartes.</p>
+                        <a href="{% url 'carte' %}" class="btn btn-primary">
+                            <i class="fas fa-map-marked-alt"></i> Aller à l'optimisation
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

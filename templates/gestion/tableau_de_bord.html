@@ -1,0 +1,1021 @@
+{% extends 'gestion/base.html' %}
+{% load custom_filters %} 
+{% block page_title %}Tableau de Bord{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ========== GESTION DES FILTRES ==========
+    const btnFiltrer = document.getElementById('btn-filtrer-tableau');
+    const btnReset = document.getElementById('btn-reset-filtre');
+    
+    if (btnFiltrer) {
+        btnFiltrer.addEventListener('click', function() {
+            const dateDebut = document.getElementById('date-debut-tableau').value;
+            const dateFin = document.getElementById('date-fin-tableau').value;
+            
+            if (dateDebut && dateFin) {
+                if (new Date(dateDebut) > new Date(dateFin)) {
+                    alert('La date de début doit être antérieure à la date de fin');
+                    return;
+                }
+                
+                // Construire l'URL avec les paramètres de filtre
+                const url = new URL(window.location.href);
+                url.searchParams.set('date_debut', dateDebut);
+                url.searchParams.set('date_fin', dateFin);
+                window.location.href = url.toString();
+            } else {
+                alert('Veuillez sélectionner les deux dates');
+            }
+        });
+    }
+    
+    if (btnReset) {
+        btnReset.addEventListener('click', function() {
+            window.location.href = "{% url 'tableau_de_bord' %}";
+        });
+    }
+    
+    // ========== GRAPHIQUES ==========
+    // 1. Graphique des courses par type de chauffeur
+    const ctxType = document.getElementById('chartCoursesType');
+    if (ctxType) {
+        new Chart(ctxType.getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: ['Taxi', 'Privé', 'Société'],
+                datasets: [{
+                    data: [{{ courses_taxi|default:0 }}, {{ courses_prive|default:0 }}, {{ courses_societe|default:0 }}],
+                    backgroundColor: [
+                        '#dc3545',  // Rouge pour taxi
+                        '#28a745',  // Vert pour privé
+                        '#6c757d'   // Gris pour société
+                    ],
+                    borderWidth: 1,
+                    hoverOffset: 15
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Courses par type de chauffeur',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        padding: 10
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // 2. Graphique des transports par type
+    const ctxTransport = document.getElementById('chartTransportsType');
+    if (ctxTransport) {
+        new Chart(ctxTransport.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Ramassages', 'Départs'],
+                datasets: [{
+                    data: [{{ ramassages_count|default:0 }}, {{ departs_count|default:0 }}],
+                    backgroundColor: [
+                        '#28a745',  // Vert pour ramassages
+                        '#ffc107'   // Jaune pour départs
+                    ],
+                    borderWidth: 2,
+                    hoverOffset: 15
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Répartition par type de transport',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        padding: 10
+                    }
+                }
+            }
+        });
+    }
+    
+    // 3. Graphique des courses par jour (barres)
+    const ctxJour = document.getElementById('chartCoursesJour');
+    if (ctxJour) {
+        new Chart(ctxJour.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: {{ jours_semaine|safe|default:"['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']" }},
+                datasets: [{
+                    label: 'Nombre de courses',
+                    data: {{ courses_par_jour|safe|default:"[0, 0, 0, 0, 0, 0, 0]" }},
+                    backgroundColor: '#007bff',
+                    borderColor: '#0056b3',
+                    borderWidth: 1,
+                    borderRadius: 5,
+                    hoverBackgroundColor: '#0056b3'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1,
+                            callback: function(value) {
+                                if (Number.isInteger(value)) {
+                                    return value;
+                                }
+                            }
+                        },
+                        grid: {
+                            drawBorder: false
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Courses par jour de la semaine',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        padding: 10
+                    }
+                }
+            }
+        });
+    }
+    
+    // 4. Graphique de l'évolution sur 30 jours (ligne)
+    const ctxEvolution = document.getElementById('chartEvolution30Jours');
+    if (ctxEvolution) {
+        // Générer des données fictives pour la démonstration
+        const labels = [];
+        const data = [];
+        for (let i = 29; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            labels.push(date.getDate() + '/' + (date.getMonth() + 1));
+            data.push(Math.floor(Math.random() * 10) + 1); // Données aléatoires pour la démo
+        }
+        
+        new Chart(ctxEvolution.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Courses par jour',
+                    data: data,
+                    borderColor: '#17a2b8',
+                    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#17a2b8',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 2
+                        },
+                        grid: {
+                            drawBorder: false
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Évolution sur 30 jours',
+                        font: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        padding: 10
+                    }
+                }
+            }
+        });
+    }
+    
+    // ========== MISE À JOUR DES STATISTIQUES EN TEMPS RÉEL ==========
+    function updateStats() {
+        // Mettre à jour les compteurs animés
+        const counters = document.querySelectorAll('.counter-value');
+        counters.forEach(counter => {
+            const target = parseInt(counter.getAttribute('data-target'));
+            const current = parseInt(counter.innerText);
+            const increment = target / 200;
+            
+            if (current < target) {
+                counter.innerText = Math.ceil(current + increment);
+                setTimeout(updateStats, 10);
+            } else {
+                counter.innerText = target;
+            }
+        });
+    }
+    
+    // Démarrer l'animation des compteurs
+    updateStats();
+    
+    // ========== TOGGLE DES SECTIONS ==========
+    const toggleButtons = document.querySelectorAll('.toggle-section');
+    toggleButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const targetId = this.getAttribute('data-target');
+            const target = document.getElementById(targetId);
+            const icon = this.querySelector('i');
+            
+            if (target) {
+                if (target.style.display === 'none') {
+                    target.style.display = 'block';
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    target.style.display = 'none';
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête avec filtre -->
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <div>
+            <h1 class="h2"><i class="fas fa-tachometer-alt text-primary"></i> Tableau de Bord</h1>
+            <small class="text-muted">Vue d'ensemble de l'activité et des statistiques</small>
+        </div>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <span class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-calendar-alt"></i> Période : {{ date_debut|date:"d/m/Y" }} - {{ date_fin|date:"d/m/Y" }}
+                </span>
+            </div>
+            <a href="{% url 'index' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-home"></i> Accueil
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtre de période -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h6 class="card-title mb-0">
+                <i class="fas fa-filter"></i> Filtrer par période
+            </h6>
+            <button class="btn btn-sm btn-light toggle-section" data-target="filter-section">
+                <i class="fas fa-chevron-up"></i>
+            </button>
+        </div>
+        <div class="card-body" id="filter-section">
+            <div class="row align-items-center">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label fw-bold">Date de début</label>
+                    <input type="date" id="date-debut-tableau" class="form-control form-control-sm" 
+                           value="{{ date_debut }}">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label class="form-label fw-bold">Date de fin</label>
+                    <input type="date" id="date-fin-tableau" class="form-control form-control-sm" 
+                           value="{{ date_fin }}">
+                </div>
+                <div class="col-md-4 mb-3 d-flex align-items-end">
+                    <div class="btn-group w-100">
+                        <button class="btn btn-primary btn-sm" id="btn-filtrer-tableau">
+                            <i class="fas fa-search me-1"></i> Appliquer
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtre">
+                            <i class="fas fa-times me-1"></i> Réinitialiser
+                        </button>
+                        <a href="{% url 'paie' %}?date_debut={{ date_debut }}&date_fin={{ date_fin }}" 
+                           class="btn btn-success btn-sm">
+                            <i class="fas fa-file-invoice-dollar me-1"></i> Rapport Paie
+                        </a>
+                    </div>
+                </div>
+                <div class="col-md-2 mb-3">
+                    <div class="card bg-success text-white text-center">
+                        <div class="card-body py-2">
+                            <h5 class="mb-0 counter-value" data-target="{{ total_courses|default:0 }}">0</h5>
+                            <small class="opacity-75">Courses validées</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-12">
+                    <div class="alert alert-info py-2 mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small>Le tableau de bord affiche uniquement les courses avec le statut "Validée". 
+                        Pour voir toutes les courses, utilisez la page <a href="{% url 'chauffeurs' %}">Gestion Chauffeurs</a>.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cartes de statistiques principales -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-primary border-4 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Agents</div>
+                            <div class="fs-5 fw-bold text-primary counter-value" data-target="{{ total_agents|default:0 }}">0</div>
+                        </div>
+                        <div class="icon-circle bg-primary bg-gradient">
+                            <i class="fas fa-users text-white"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                 style="width: {{ taux_completude|default:0 }}%;" 
+                                 aria-valuenow="{{ taux_completude|default:0 }}" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100"></div>
+                        </div>
+                        <div class="small mt-2">
+                            <span class="fw-bold text-success">{{ taux_completude|default:0 }}%</span> complétude
+                            <span class="text-danger ms-2">{{ agents_incomplets|default:0 }} incomplets</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-success border-4 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Revenus (Période)</div>
+                            <div class="fs-5 fw-bold text-success counter-value" data-target="{{ total_a_payer|default:0 }}">0</div>
+                        </div>
+                        <div class="icon-circle bg-success bg-gradient">
+                            <i class="fas fa-money-bill-wave text-white"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between small">
+                            <div class="text-success">
+                                <i class="fas fa-arrow-up me-1"></i>
+                                {{ revenus_30jours|default:0 }} TND (30j)
+                            </div>
+                            <div class="text-muted">
+                                Moyenne: {{ total_a_payer|divisibleby:30|floatformat:2|default:0 }} TND/j
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-info border-4 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Chauffeurs</div>
+                            <div class="fs-5 fw-bold text-info counter-value" data-target="{{ total_chauffeurs|default:0 }}">0</div>
+                        </div>
+                        <div class="icon-circle bg-info bg-gradient">
+                            <i class="fas fa-user-tie text-white"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="badge bg-danger">
+                                <i class="fas fa-taxi me-1"></i>{{ courses_taxi|default:0 }}
+                            </span>
+                            <span class="badge bg-success">
+                                <i class="fas fa-car me-1"></i>{{ courses_prive|default:0 }}
+                            </span>
+                            <span class="badge bg-secondary">
+                                <i class="fas fa-building me-1"></i>{{ courses_societe|default:0 }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-warning border-4 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Activité</div>
+                            <div class="fs-5 fw-bold text-warning counter-value" data-target="{{ courses_aujourdhui|default:0 }}">0</div>
+                        </div>
+                        <div class="icon-circle bg-warning bg-gradient">
+                            <i class="fas fa-chart-line text-white"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between">
+                            <div class="small">
+                                <span class="text-warning fw-bold">{{ courses_30jours|default:0 }}</span> courses/30j
+                            </div>
+                            <div class="small">
+                                <span class="badge bg-primary">{{ total_affectations|default:0 }} affectations</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deuxième ligne de statistiques -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-secondary border-4 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Sociétés</div>
+                            <div class="fs-5 fw-bold text-secondary counter-value" data-target="{{ total_societes|default:0 }}">0</div>
+                        </div>
+                        <div class="icon-circle bg-secondary bg-gradient">
+                            <i class="fas fa-building text-white"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        {% if top_societes|length > 0 %}
+                        <div class="small">
+                            <div class="fw-bold">Top société :</div>
+                            <div>{{ top_societes.0.nom|truncatechars:20 }}</div>
+                            <div class="text-success">{{ top_societes.0.count|default:0 }} courses</div>
+                        </div>
+                        {% else %}
+                        <div class="text-muted small">Aucune société</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-danger border-4 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Transport</div>
+                            <div class="fs-5 fw-bold text-danger counter-value" data-target="{{ total_affectations|default:0 }}">0</div>
+                        </div>
+                        <div class="icon-circle bg-danger bg-gradient">
+                            <i class="fas fa-truck text-white"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="badge bg-success">
+                                <i class="fas fa-arrow-circle-up me-1"></i>{{ ramassages_count|default:0 }}
+                            </span>
+                            <span class="badge bg-warning text-dark">
+                                <i class="fas fa-arrow-circle-down me-1"></i>{{ departs_count|default:0 }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-primary border-4 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Période</div>
+                            <div class="fs-6 fw-bold text-primary">
+                                {{ premier_du_mois|date:"d/m" }} - {{ dernier_du_mois|date:"d/m/Y" }}
+                            </div>
+                        </div>
+                        <div class="icon-circle bg-primary bg-gradient">
+                            <i class="fas fa-calendar-day text-white"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="small">
+                            <div class="d-flex justify-content-between">
+                                <span>Filtre actuel :</span>
+                                <span class="fw-bold">{{ date_debut|date:"d/m/Y" }} → {{ date_fin|date:"d/m/Y" }}</span>
+                            </div>
+                            <div class="progress mt-2" style="height: 6px;">
+                                {% with total_days=date_fin|date:"j"|add:"0" current_days=date_debut|date:"j"|add:"0" %}
+                                <div class="progress-bar bg-info" role="progressbar" 
+                                     style="width: {% if total_days > 0 %}{{ current_days|divisibleby:total_days|floatformat:2|cut:'.' }}{% else %}0{% endif %}%;"></div>
+                                {% endwith %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-success border-4 h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Taux de validation</div>
+                            <div class="fs-5 fw-bold text-success">
+                                {% if total_courses and total_affectations %}
+                                    {{ total_courses|divisibleby:total_affectations|multiply:100|floatformat:0 }}%
+                                {% else %}
+                                    0%
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="icon-circle bg-success bg-gradient">
+                            <i class="fas fa-clipboard-check text-white"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="small">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-success">
+                                    <i class="fas fa-check-circle me-1"></i>{{ total_courses|default:0 }} validées
+                                </span>
+                                <span class="text-muted">{{ total_affectations|default:0 }} total</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphiques -->
+    <div class="row mb-4">
+        <!-- Graphique 1: Courses par type de chauffeur -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-chart-pie me-2"></i>Courses par Type de Chauffeur
+                    </h6>
+                    <span class="badge bg-light text-primary">
+                        Total: {{ courses_taxi|add:courses_prive|add:courses_societe|default:0 }}
+                    </span>
+                </div>
+                <div class="card-body position-relative">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="chartCoursesType"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphique 2: Transports par type -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-chart-doughnut me-2"></i>Répartition par Type de Transport
+                    </h6>
+                    <span class="badge bg-light text-success">
+                        Total: {{ ramassages_count|add:departs_count|default:0 }}
+                    </span>
+                </div>
+                <div class="card-body position-relative">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="chartTransportsType"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphique 3: Courses par jour -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>Courses par Jour (Semaine)
+                    </h6>
+                    <span class="badge bg-light text-info">
+                        Semaine du {{ debut_semaine|date:"d/m/Y" }}
+                    </span>
+                </div>
+                <div class="card-body position-relative">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="chartCoursesJour"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphique 4: Évolution sur 30 jours -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>Évolution sur 30 Jours
+                    </h6>
+                    <span class="badge bg-light text-warning">
+                        {{ courses_30jours|default:0 }} courses
+                    </span>
+                </div>
+                <div class="card-body position-relative">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="chartEvolution30Jours"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Données récentes -->
+    <div class="row mb-4">
+        <!-- Dernières courses validées -->
+        <div class="col-xl-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-white d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-history me-2"></i>Dernières Courses Validées
+                    </h6>
+                    <a href="{% url 'chauffeurs' %}" class="btn btn-sm btn-light">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Date</th>
+                                    <th>Chauffeur</th>
+                                    <th>Type</th>
+                                    <th>Prix</th>
+                                    <th class="pe-3">Agents</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for course in courses_recentes %}
+                                <tr>
+                                    <td class="ps-3">
+                                        <small>{{ course.date_reelle|date:"d/m/Y" }}</small>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold">{{ course.chauffeur.nom|truncatechars:15 }}</div>
+                                        <small class="text-muted">{{ course.chauffeur.get_type_chauffeur_display }}</small>
+                                    </td>
+                                    <td>
+                                        {% if course.type_transport == 'ramassage' %}
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-arrow-circle-up me-1"></i>Ramassage
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="fas fa-arrow-circle-down me-1"></i>Départ
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if course.prix_total %}
+                                        <strong class="text-success">{{ course.prix_total|floatformat:2 }} TND</strong>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="pe-3">
+                                        <span class="badge bg-info">{{ course.affectation_set.count }}</span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        <i class="fas fa-inbox fa-2x mb-3 d-block"></i>
+                                        Aucune course récente
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top sociétés -->
+        <div class="col-xl-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-trophy me-2"></i>Top Sociétés
+                    </h6>
+                    <a href="{% url 'societes' %}" class="btn btn-sm btn-light">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">#</th>
+                                    <th>Société</th>
+                                    <th>Courses</th>
+                                    <th>Total TND</th>
+                                    <th class="pe-3">Contact</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for societe in top_societes %}
+                                <tr>
+                                    <td class="ps-3">
+                                        <span class="badge bg-secondary">{{ forloop.counter }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold">{{ societe.nom|truncatechars:20 }}</div>
+                                        {% if societe.matricule_fiscale %}
+                                        <small class="text-muted">{{ societe.matricule_fiscale|truncatechars:15 }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ societe.count|default:0 }}</span>
+                                    </td>
+                                    <td>
+                                        {% with total=societe.count|default:0 %}
+                                        <span class="badge bg-success">{{ total|floatformat:0 }} TND</span>
+                                        {% endwith %}
+                                    </td>
+                                    <td class="pe-3">
+                                        <small>{{ societe.contact_personne|default:"-"|truncatechars:15 }}</small>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        <i class="fas fa-building fa-2x mb-3 d-block"></i>
+                                        Aucune société trouvée
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panneau de résumé -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card bg-gradient-primary text-white">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 text-center border-end border-light border-opacity-25">
+                            <div class="fs-2 fw-bold">{{ total_courses|default:0 }}</div>
+                            <div class="opacity-75">Courses validées</div>
+                        </div>
+                        <div class="col-md-3 text-center border-end border-light border-opacity-25">
+                            <div class="fs-2 fw-bold">{{ total_a_payer|floatformat:2|default:"0.00" }}</div>
+                            <div class="opacity-75">Total revenus (TND)</div>
+                        </div>
+                        <div class="col-md-3 text-center border-end border-light border-opacity-25">
+                            <div class="fs-2 fw-bold">{{ taux_completude|default:0 }}%</div>
+                            <div class="opacity-75">Taux de complétude</div>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <div class="fs-2 fw-bold">{{ courses_30jours|default:0 }}</div>
+                            <div class="opacity-75">Activité 30 jours</div>
+                        </div>
+                    </div>
+                    <hr class="border-light border-opacity-25 my-4">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Période : {{ date_debut|date:"d/m/Y" }} - {{ date_fin|date:"d/m/Y" }}</h6>
+                            <small class="opacity-75">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Données basées sur les courses avec statut "Validée"
+                            </small>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <div class="btn-group">
+                                <a href="{% url 'paie' %}?date_debut={{ date_debut }}&date_fin={{ date_fin }}" 
+                                   class="btn btn-light">
+                                    <i class="fas fa-file-invoice-dollar me-1"></i>Rapport de paie
+                                </a>
+                                <a href="{% url 'chauffeurs' %}" class="btn btn-outline-light">
+                                    <i class="fas fa-car me-1"></i>Toutes les courses
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Styles pour les cartes de statistiques */
+.card {
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    overflow: hidden;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 1rem 1.25rem;
+}
+
+.card-body {
+    padding: 1.25rem;
+}
+
+/* Styles pour les icônes circulaires */
+.icon-circle {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bg-gradient {
+    background: linear-gradient(135deg, var(--bs-gradient-from), var(--bs-gradient-to));
+}
+
+.bg-primary.bg-gradient {
+    --bs-gradient-from: #4e73df;
+    --bs-gradient-to: #224abe;
+}
+
+.bg-success.bg-gradient {
+    --bs-gradient-from: #1cc88a;
+    --bs-gradient-to: #13855c;
+}
+
+.bg-info.bg-gradient {
+    --bs-gradient-from: #36b9cc;
+    --bs-gradient-to: #258391;
+}
+
+.bg-warning.bg-gradient {
+    --bs-gradient-from: #f6c23e;
+    --bs-gradient-to: #dda20a;
+}
+
+.bg-danger.bg-gradient {
+    --bs-gradient-from: #e74a3b;
+    --bs-gradient-to: #be2617;
+}
+
+.bg-secondary.bg-gradient {
+    --bs-gradient-from: #858796;
+    --bs-gradient-to: #60616f;
+}
+
+/* Styles pour les bordures */
+.border-start {
+    border-left-width: 4px !important;
+}
+
+/* Styles pour les badges */
+.badge {
+    padding: 0.4em 0.8em;
+    font-weight: 600;
+}
+
+/* Styles pour les graphiques */
+.chart-container {
+    position: relative;
+}
+
+/* Animation pour les compteurs */
+.counter-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+/* Styles pour les boutons de toggle */
+.toggle-section {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+}
+
+.toggle-section:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Styles pour les cartes de résumé */
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+    border: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .card-header h6 {
+        font-size: 0.9rem;
+    }
+    
+    .fs-5 {
+        font-size: 1.25rem !important;
+    }
+    
+    .fs-2 {
+        font-size: 1.75rem !important;
+    }
+    
+    .icon-circle {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .icon-circle i {
+        font-size: 0.9rem;
+    }
+    
+    .chart-container {
+        height: 250px !important;
+    }
+}
+</style>
+{% endblock %}
