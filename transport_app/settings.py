@@ -1,16 +1,27 @@
 import os
 from pathlib import Path
-
 import dj_database_url
 
+# Chemins de base
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-votre-cle-secrete-ici'
-POSITIONSTACK_API_KEY = '88bcabc4997f720becd5cb84b44c7b6e'
-DEBUG = True
+# Configuration de base
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-votre-cle-secrete-ici-developpement')
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+]
 
+if not DEBUG:
+    ALLOWED_HOSTS += [
+        'navette.onrender.com',
+        'www.navette.onrender.com',
+        '.onrender.com',  # Permet tous les sous-domaines
+    ]
+
+# Applications installées
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -24,15 +35,17 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     # Vos applications
-    'gestion',  # IMPORTANT : doit être avant chauffeurs_mobile
+    'gestion',
     'gestion.geolocalisation',
-    'chauffeurs_mobile',  # Doit être après gestion
+    'chauffeurs_mobile',
 ]
+
+# Middleware
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Gestion des fichiers statiques
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    #'chauffeurs_mobile.middleware.MobileSessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -60,7 +73,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'transport_app.wsgi.application'
 
-# Base de données
+# Configuration de la base de données
 if DEBUG:
     DATABASES = {
         'default': {
@@ -72,154 +85,94 @@ else:
     DATABASES = {
         'default': dj_database_url.config(
             default=os.environ.get('DATABASE_URL'),
-            conn_max_age=600
+            conn_max_age=600,
+            conn_health_checks=True,
         )
     }
 
+# Validation des mots de passe
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-CSRF_TRUSTED_ORIGINS = ['http://localhost:8000', 'http://127.0.0.1:8000']
-
-SESSION_ENGINE = 'django.contrib.sessions.backends.db'  # Utiliser la base de données
-SESSION_COOKIE_NAME = 'sessionid_mobile'  # Nom différent pour éviter les conflits
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # 7 jours en secondes
+# Configuration des sessions
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # 7 jours par défaut
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
-SESSION_SAVE_EVERY_REQUEST = True  # IMPORTANT: Sauvegarder à chaque requête
-# Session par défaut (admin)
-SESSION_COOKIE_NAME = 'sessionid'
-SESSION_COOKIE_AGE = 60 * 60 * 2  # 2 heures pour l'admin
+SESSION_SAVE_EVERY_REQUEST = True
 
-# Configuration pour l'interface mobile
-MOBILE_SESSION_COOKIE_NAME = 'mobile_sessionid'
-MOBILE_SESSION_COOKIE_AGE = 60 * 60 * 24 * 30  # 30 jours
-MOBILE_SESSION_COOKIE_SECURE = False  # True en production avec HTTPS
-MOBILE_SESSION_COOKIE_HTTPONLY = True
-MOBILE_SESSION_COOKIE_SAMESITE = 'Lax'
-MOBILE_SESSION_COOKIE_PATH = '/mobile/'  # IMPORTANT : seulement pour les URLs /mobile/
-# Configuration des cookies
-SESSION_COOKIE_SECURE = False  # True en production avec HTTPS
+# Configuration des cookies selon l'environnement
+if DEBUG:
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_NAME = 'sessionid_mobile'  # Pour le développement
+else:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_NAME = 'sessionid'
+
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
-SECURE_BROWSER_XSS_FILTER = True
-X_FRAME_OPTIONS = 'DENY'
 
+# Configuration CSRF
+CSRF_COOKIE_HTTPONLY = False  # Doit être False pour l'accès JavaScript
+CSRF_USE_SESSIONS = True
+CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
+
+if not DEBUG:
+    CSRF_TRUSTED_ORIGINS += [
+        'https://navette.onrender.com',
+        'http://navette.onrender.com',
+    ]
+
+# Configuration CORS
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOWED_ORIGINS = [
+        "https://navette.onrender.com",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
+CORS_ALLOW_HEADERS = [
+    'accept', 'accept-encoding', 'authorization', 'content-type',
+    'dnt', 'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
+]
+
+# Internationalisation
 LANGUAGE_CODE = 'fr-fr'
 TIME_ZONE = 'Europe/Paris'
 USE_I18N = True
 USE_TZ = True
 
+# Fichiers statiques
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+# Fichiers médias
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
-CRISPY_TEMPLATE_PACK = "bootstrap5"
-
-# Prix des courses selon le type de chauffeur
-PRIX_COURSE_TAXI = 15.0
-PRIX_COURSE_CHAUFFEUR = 10.0
-PRIX_COURSE_SOCIETE = 0.0
-
-LOGIN_URL = '/login/'
-LOGIN_REDIRECT_URL = '/'
-LOGOUT_REDIRECT_URL = '/'
-
-# Configuration pour Folium (carte)
-LEAFLET_CONFIG = {
-    'DEFAULT_CENTER': (35.8256, 10.6415),
-    'DEFAULT_ZOOM': 12,
-    'MIN_ZOOM': 3,
-    'MAX_ZOOM': 18,
-    'RESET_VIEW': False,
-    'SCALE': 'both',
-    'ATTRIBUTION_PREFIX': 'Systeme de Gestion Transport',
-}
-
-# Configuration Nominatim (géocodage)
-NOMINATIM_USER_AGENT = 'gestion_transport_app'
-NOMINATIM_TIMEOUT = 10
-
-# Configuration CSP
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com")
-CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://unpkg.com")
-CSP_IMG_SRC = ("'self'", "data:", "https://*.tile.openstreetmap.org")
-CSP_FONT_SRC = ("'self'", "https://cdn.jsdelivr.net")
-CSP_CONNECT_SRC = ("'self'",)
-
-# Pour Leaflet et les cartes
-CSP_SCRIPT_SRC += ("https://unpkg.com", "https://cdn.jsdelivr.net", "http://*.tile.openstreetmap.org")
-CSP_STYLE_SRC += ("https://unpkg.com", "https://cdn.jsdelivr.net")
-CSP_IMG_SRC += ("https://*.tile.openstreetmap.org", "data:")
-
-# Autoriser eval() pour certaines fonctionnalités
-CSP_SCRIPT_SRC += ("'unsafe-eval'",)
-
-# Désactiver le frame-ancestors pour intégrer les cartes
-CSP_FRAME_ANCESTORS = ("'self'",)
-
-# Configuration cache pour le géocodage
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
-    }
-}
-
-CACHE_GEOCODING = True
-CACHE_TIMEOUT_GEOCODING = 86400  # 24h
-
-# Configuration OSRM pour le routage
-OSRM_BASE_URL = 'http://router.project-osrm.org'
-
-# Configuration de l'application géolocalisation
-GEOCODING_SERVICES = ['positionstack', 'nominatim', 'fallback']
-MAX_GEOCODING_RETRIES = 3
-GEOCODING_TIMEOUT = 5
-
-# Logging configuration
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'geolocation.log',
-        },
-    },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
-    },
-    'loggers': {
-        'gestion.geolocalisation': {
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-    },
-}
+# Configuration Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
@@ -238,52 +191,95 @@ REST_FRAMEWORK = {
     ],
 }
 
-# Configuration CORS pour l'interface mobile
-CORS_ALLOW_ALL_ORIGINS = True  # En développement seulement
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:8080",
-]
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
-]
-CORS_ALLOW_HEADERS = [
-    'accept',
-    'accept-encoding',
-    'authorization',
-    'content-type',
-    'dnt',
-    'origin',
-    'user-agent',
-    'x-csrftoken',
-    'x-requested-with',
-]
+# Configuration Crispy Forms
+CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
+CRISPY_TEMPLATE_PACK = "bootstrap5"
 
-# Configuration sessions pour mobile (TRÈS IMPORTANT)
-SESSION_COOKIE_NAME = 'sessionid_mobile'
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # 7 jours
-SESSION_EXPIRE_AT_BROWSER_CLOSE = False
-SESSION_SAVE_EVERY_REQUEST = True  # SAUVE LA SESSION À CHAQUE REQUÊTE
-SESSION_ENGINE = 'django.contrib.sessions.backends.db'
-SESSION_COOKIE_SECURE = False  # True en production avec HTTPS
-SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'
+# Prix des courses
+PRIX_COURSE_TAXI = 15.0
+PRIX_COURSE_CHAUFFEUR = 10.0
+PRIX_COURSE_SOCIETE = 0.0
 
-# Cookies CSRF pour API
-CSRF_COOKIE_NAME = 'csrftoken_mobile'
-CSRF_COOKIE_HTTPONLY = False  # Doit être False pour être accessible par JS
-CSRF_USE_SESSIONS = True
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:8000',
-    'http://127.0.0.1:8000',
-]
-CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
-CSRF_COOKIE_SECURE = False  # True en production avec HTTPS
-CSRF_COOKIE_SAMESITE = 'Lax'
+# URLs de redirection
+LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
+
+# Configuration Leaflet
+LEAFLET_CONFIG = {
+    'DEFAULT_CENTER': (35.8256, 10.6415),
+    'DEFAULT_ZOOM': 12,
+    'MIN_ZOOM': 3,
+    'MAX_ZOOM': 18,
+    'RESET_VIEW': False,
+    'SCALE': 'both',
+    'ATTRIBUTION_PREFIX': 'Systeme de Gestion Transport',
+}
+
+# Configuration Nominatim
+NOMINATIM_USER_AGENT = 'gestion_transport_app'
+NOMINATIM_TIMEOUT = 10
+
+# Configuration PositionStack
+POSITIONSTACK_API_KEY = os.environ.get('POSITIONSTACK_API_KEY', '88bcabc4997f720becd5cb84b44c7b6e')
+
+# Configuration OSRM
+OSRM_BASE_URL = 'http://router.project-osrm.org'
+
+# Configuration géocodage
+GEOCODING_SERVICES = ['positionstack', 'nominatim', 'fallback']
+MAX_GEOCODING_RETRIES = 3
+GEOCODING_TIMEOUT = 5
+CACHE_GEOCODING = True
+CACHE_TIMEOUT_GEOCODING = 86400  # 24h
+
+# Configuration cache
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}
+
+# Configuration CSP (Content Security Policy)
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com")
+CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", 
+                  "https://unpkg.com", "http://*.tile.openstreetmap.org")
+CSP_IMG_SRC = ("'self'", "data:", "https://*.tile.openstreetmap.org")
+CSP_FONT_SRC = ("'self'", "https://cdn.jsdelivr.net")
+CSP_CONNECT_SRC = ("'self'",)
+CSP_FRAME_ANCESTORS = ("'self'",)
+
+# Sécurité supplémentaire
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = 'DENY'
+
+# Logging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'logs' / 'geolocation.log',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO' if DEBUG else 'WARNING',
+    },
+    'loggers': {
+        'gestion.geolocalisation': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+# Créer le dossier logs s'il n'existe pas
+os.makedirs(BASE_DIR / 'logs', exist_ok=True)
