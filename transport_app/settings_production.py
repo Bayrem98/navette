@@ -1,22 +1,13 @@
 import os
 from pathlib import Path
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-votre-cle-secrete-ici-dev-uniquement'
-DEBUG = True
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
-
-# Forcer HTTP en développement
-if DEBUG:
-    SECURE_SSL_REDIRECT = False
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
-    SECURE_HSTS_SECONDS = 0
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
-    SECURE_HSTS_PRELOAD = False
-    SECURE_CONTENT_TYPE_NOSNIFF = False
-    SECURE_BROWSER_XSS_FILTER = False
+# Production settings
+SECRET_KEY = os.environ.get('SECRET_KEY')
+DEBUG = False
+ALLOWED_HOSTS = ['navette.onrender.com', '.onrender.com']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -30,6 +21,7 @@ INSTALLED_APPS = [
     'crispy_bootstrap5',
     'rest_framework',
     'corsheaders',
+    'whitenoise.runserver_nostatic',
     # Vos applications
     'gestion',
     'gestion.geolocalisation',
@@ -38,6 +30,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -68,12 +61,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'transport_app.wsgi.application'
 
-# SQLite pour le développement local
+# PostgreSQL for production
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL'),
+        conn_max_age=600,
+        conn_health_checks=True,
+        ssl_require=True,
+    )
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -96,15 +91,19 @@ TIME_ZONE = 'Europe/Paris'
 USE_I18N = True
 USE_TZ = True
 
+# Static files
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+# Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Crispy Forms
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
 
@@ -117,13 +116,13 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
-# Session configuration
+# Session configuration - Production
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_NAME = 'sessionid'
 SESSION_COOKIE_AGE = 60 * 60 * 2
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_SAVE_EVERY_REQUEST = True
-SESSION_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
@@ -131,17 +130,26 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 MOBILE_SESSION_COOKIE_NAME = 'mobile_sessionid'
 MOBILE_SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
 MOBILE_SESSION_COOKIE_PATH = '/mobile/'
-MOBILE_SESSION_COOKIE_SECURE = False
+MOBILE_SESSION_COOKIE_SECURE = True
 
-# CSRF
-CSRF_COOKIE_SECURE = False
+# CSRF - Production
+CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = False
-CSRF_USE_SESSIONS = False
-CSRF_TRUSTED_ORIGINS = ['http://localhost:8000', 'http://127.0.0.1:8000']
+CSRF_USE_SESSIONS = True
+CSRF_TRUSTED_ORIGINS = ['https://navette.onrender.com']
 
-# CORS
+# CORS - Production
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = ['http://localhost:8000', 'http://127.0.0.1:8000']
+CORS_ALLOWED_ORIGINS = ['https://navette.onrender.com']
+
+# Security
+SECURE_SSL_REDIRECT = True
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = 'DENY'
 
 # Leaflet
 LEAFLET_CONFIG = {
@@ -152,7 +160,7 @@ LEAFLET_CONFIG = {
 }
 
 # API Keys
-POSITIONSTACK_API_KEY = '88bcabc4997f720becd5cb84b44c7b6e'
+POSITIONSTACK_API_KEY = os.environ.get('POSITIONSTACK_API_KEY')
 
 # REST Framework
 REST_FRAMEWORK = {
@@ -163,4 +171,3 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
 }
-
