@@ -1,25 +1,27 @@
 import os
 from pathlib import Path
 import dj_database_url
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Chemins de base
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Configuration de base
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-votre-cle-secrete-ici-developpement')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-votre-cle-secrete-ici')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+
+# API Key
+POSITIONSTACK_API_KEY = os.environ.get('POSITIONSTACK_API_KEY', '88bcabc4997f720becd5cb84b44c7b6e')
 
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
+    '.onrender.com',
+    'navette.onrender.com',
+    'www.navette.onrender.com',
 ]
-
-if not DEBUG:
-    ALLOWED_HOSTS += [
-        'navette.onrender.com',
-        'www.navette.onrender.com',
-        '.onrender.com',  # Permet tous les sous-domaines
-    ]
 
 # Applications installées
 INSTALLED_APPS = [
@@ -34,6 +36,7 @@ INSTALLED_APPS = [
     'crispy_bootstrap5',
     'rest_framework',
     'corsheaders',
+    'whitenoise.runserver_nostatic',
     # Vos applications
     'gestion',
     'gestion.geolocalisation',
@@ -43,7 +46,7 @@ INSTALLED_APPS = [
 # Middleware
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Gestion des fichiers statiques
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -86,7 +89,6 @@ else:
         'default': dj_database_url.config(
             default=os.environ.get('DATABASE_URL'),
             conn_max_age=600,
-            conn_health_checks=True,
         )
     }
 
@@ -139,22 +141,23 @@ if not DEBUG:
         'http://navette.onrender.com',
     ]
 
-# Configuration CORS
+# Configuration CORS - adaptée pour Render
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
-else:
     CORS_ALLOWED_ORIGINS = [
-        "https://navette.onrender.com",
         "http://localhost:8000",
         "http://127.0.0.1:8000",
+        "http://localhost:8080",
     ]
+else:
+    CORS_ALLOWED_ORIGINS = [
+        "https://*.onrender.com",
+    ]
+    CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST', 'PUT']
-CORS_ALLOW_HEADERS = [
-    'accept', 'accept-encoding', 'authorization', 'content-type',
-    'dnt', 'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
-]
+CORS_ALLOW_HEADERS = ['accept', 'accept-encoding', 'authorization', 'content-type', 'dnt', 'origin', 'user-agent', 'x-csrftoken', 'x-requested-with']
 
 # Internationalisation
 LANGUAGE_CODE = 'fr-fr'
@@ -172,6 +175,8 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 # Configuration Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -179,15 +184,6 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
-    ],
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
-    ],
-    'DEFAULT_PARSER_CLASSES': [
-        'rest_framework.parsers.JSONParser',
-        'rest_framework.parsers.FormParser',
-        'rest_framework.parsers.MultiPartParser',
     ],
 }
 
@@ -220,9 +216,6 @@ LEAFLET_CONFIG = {
 NOMINATIM_USER_AGENT = 'gestion_transport_app'
 NOMINATIM_TIMEOUT = 10
 
-# Configuration PositionStack
-POSITIONSTACK_API_KEY = os.environ.get('POSITIONSTACK_API_KEY', '88bcabc4997f720becd5cb84b44c7b6e')
-
 # Configuration OSRM
 OSRM_BASE_URL = 'http://router.project-osrm.org'
 
@@ -241,15 +234,15 @@ CACHES = {
     }
 }
 
-# Configuration CSP (Content Security Policy)
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com")
-CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", 
-                  "https://unpkg.com", "http://*.tile.openstreetmap.org")
-CSP_IMG_SRC = ("'self'", "data:", "https://*.tile.openstreetmap.org")
-CSP_FONT_SRC = ("'self'", "https://cdn.jsdelivr.net")
-CSP_CONNECT_SRC = ("'self'",)
-CSP_FRAME_ANCESTORS = ("'self'",)
+# Configuration CSP - adaptée pour Render
+if not DEBUG:
+    CSP_DEFAULT_SRC = ("'self'",)
+    CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com")
+    CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://unpkg.com")
+    CSP_IMG_SRC = ("'self'", "data:", "https://*.tile.openstreetmap.org")
+    CSP_FONT_SRC = ("'self'", "https://cdn.jsdelivr.net")
+    CSP_CONNECT_SRC = ("'self'",)
+    CSP_FRAME_ANCESTORS = ("'self'",)
 
 # Sécurité supplémentaire
 SECURE_BROWSER_XSS_FILTER = True
@@ -280,6 +273,17 @@ LOGGING = {
         },
     },
 }
+
+# Sécurité supplémentaire en production
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
 
 # Créer le dossier logs s'il n'existe pas
 os.makedirs(BASE_DIR / 'logs', exist_ok=True)
