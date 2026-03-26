@@ -122,20 +122,6 @@ def creer_donnees_par_defaut():
             'societe': hannibal,
             'voiture_personnelle': True
         },
-        {
-            'nom': 'Mohamed BEN ALI',
-            'adresse': 'Ariana Ville',
-            'telephone': '12345678',
-            'societe': astragale,  # CORRECTION : minuscule
-            'voiture_personnelle': False
-        },
-        {
-            'nom': 'Sophie DUPONT',
-            'adresse': 'Lac 2',
-            'telephone': '87654321',
-            'societe': ulysse,  # CORRECTION : minuscule
-            'voiture_personnelle': False
-        }
     ]
     
     for agent_data in agents_test:
