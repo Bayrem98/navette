@@ -2313,45 +2313,69 @@ def api_creer_course(request):
         from datetime import datetime
         now = datetime.now()
         heure_actuelle = now.hour
+        date_actuelle = now.date()
         
         # Valider la date
         try:
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             return JsonResponse({'success': False, 'error': 'Format de date invalide'}, status=400)
-            
-        aujourd_hui = date_obj  # Utiliser la date fournie
-        
-        if date_obj != aujourd_hui:
-            return JsonResponse({
-                'success': False,
-                'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
-            }, status=400)
         
         heure_int = int(heure)
         
-        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle: {heure_actuelle}h")
+        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle: {heure_actuelle}h, Date actuelle: {date_actuelle}, Date demandée: {date_obj}")
         
-        # Heures de nuit (00h-03h) : toujours futures
+        # ✅ CORRECTION POUR 00h: Gestion spéciale pour les courses à minuit
+        if heure_int == 0:
+            # Pour 00h, on autorise la création si:
+            # 1. La date est aujourd'hui (début de journée)
+            # 2. OU la date est demain (si on est après minuit)
+            
+            if date_obj == date_actuelle:
+                # Création pour aujourd'hui à minuit (début de journée)
+                print(f"🕛 Création course pour aujourd'hui à 00h - AUTORISÉ")
+            elif date_obj == date_actuelle + timedelta(days=1):
+                # Création pour demain à minuit (si on est après 00h)
+                print(f"🕛 Création course pour demain à 00h - AUTORISÉ")
+                # On force la date à aujourd'hui pour la création
+                date_obj = date_actuelle
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                }, status=400)
+        else:
+            # Pour les autres heures, vérification normale
+            if date_obj != date_actuelle:
+                return JsonResponse({
+                    'success': False,
+                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                }, status=400)
+        
+        # Heures de nuit (00h-03h) : vérification spéciale
         if heure_int < 4:
-            print(f"  ❌ Heure de nuit {heure_int}h - INTERDITE")
-            return JsonResponse({
-                'success': False,
-                'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure de nuit)."
-            }, status=400)
-        
-        # Heures de jour - comparaison simple
-        if heure_int > heure_actuelle:
-            print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
-            return JsonResponse({
-                'success': False,
-                'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future)."
-            }, status=400)
+            # Pour 00h, on autorise (c'est une heure de début de journée)
+            if heure_int == 0:
+                print(f"🕛 Heure 00h - AUTORISÉE pour début de journée")
+                # Continuer sans erreur
+            else:
+                print(f"  ❌ Heure de nuit {heure_int}h - INTERDITE")
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure de nuit)."
+                }, status=400)
+        else:
+            # Heures de jour - comparaison simple
+            if heure_int > heure_actuelle:
+                print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future)."
+                }, status=400)
         
         # ✅ Heure passée ou actuelle - AUTORISÉE
         print(f"  ✅ Heure {heure_int}h - autorisée (rattrapage)")
         
-       
         # =================================================
         
         # Récupérer les modèles
@@ -2456,10 +2480,12 @@ def api_creer_course(request):
                 agent = Agent.objects.get(id=agent_id)
                 print(f"✅ Agent trouvé: {agent.nom} (ID: {agent.id})")
                 
-                # Vérifier si l'agent n'est pas déjà affecté ce jour
+                # Vérifier si l'agent n'est pas déjà affecté pour cette heure (et non pour toute la journée)
+                # Pour 00h, on vérifie spécifiquement l'heure
                 existe_deja = Affectation.objects.filter(
                     agent=agent,
-                    date_reelle=date_obj
+                    date_reelle=date_obj,
+                    heure=heure_int  # Vérifier seulement pour la même heure
                 ).exists()
                 
                 if not existe_deja:
@@ -2552,7 +2578,7 @@ def api_creer_course(request):
                         print(f"  ⚠️ Planning non chargé, pas de vérification")
                     
                 else:
-                    print(f"⚠️ Agent {agent.nom} déjà affecté ce jour")
+                    print(f"⚠️ Agent {agent.nom} déjà affecté à {heure_int}h")
                     
             except Agent.DoesNotExist:
                 print(f"❌ Agent ID {agent_id} non trouvé")
@@ -2624,7 +2650,7 @@ def api_creer_course(request):
 @csrf_exempt
 @require_GET
 def api_agents_disponibles(request):
-    """API pour voir les agents disponibles pour aujourd'hui - BLOCAGE PAR JOUR"""
+    """API pour voir les agents disponibles pour aujourd'hui - CORRIGÉ POUR 00h"""
     chauffeur_id = request.session.get('chauffeur_id')
     
     if not chauffeur_id:
@@ -2644,11 +2670,28 @@ def api_agents_disponibles(request):
         
         date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
         aujourd_hui = timezone.now().date()
-        
-        if date_obj != aujourd_hui:
-            return JsonResponse({'success': False, 'error': "Vous ne pouvez créer des courses que pour aujourd'hui"})
-        
         heure_int = int(heure)
+        
+        # ✅ CORRECTION: Si l'heure est 00h, on permet de créer pour le jour suivant
+        # car à minuit, c'est techniquement le début du nouveau jour
+        if heure_int == 0:
+            # Pour 00h, on autorise à créer des courses pour aujourd'hui OU demain
+            # selon le contexte
+            if date_obj == aujourd_hui:
+                # C'est bon, on crée pour aujourd'hui à minuit
+                print(f"🕛 Création course pour aujourd'hui à 00h")
+            elif date_obj == aujourd_hui + timedelta(days=1):
+                # Si on est à 00h, on autorise aussi pour demain (car minuit commence le nouveau jour)
+                print(f"🕛 Création course pour demain à 00h")
+                # On force la date à aujourd'hui pour éviter les problèmes
+                date_obj = aujourd_hui
+                date_str = aujourd_hui.isoformat()
+            else:
+                return JsonResponse({'success': False, 'error': "Vous ne pouvez créer des courses que pour aujourd'hui"})
+        else:
+            # Pour les autres heures, vérification normale
+            if date_obj != aujourd_hui:
+                return JsonResponse({'success': False, 'error': "Vous ne pouvez créer des courses que pour aujourd'hui"})
         
         print(f"🔍 Recherche agents pour: {date_obj} - {type_transport} - {heure_int}h")
         
@@ -2709,18 +2752,36 @@ def api_agents_disponibles(request):
             })
         
         # ========== RÉCUPÉRER LES AGENTS ==========
-        # ✅ BLOCAGE PAR JOUR COMPLET
-        agents_deja_dans_course = Affectation.objects.filter(
-            date_reelle=date_obj  # ← UNIQUEMENT LA DATE, PAS L'HEURE
-        ).values_list('agent_id', flat=True).distinct()
+        # Vérifier les agents déjà dans une course à cette heure
+        courses_aujourdhui = Course.objects.filter(date_reelle=date_obj)
         
-        # Réservations pour aujourd'hui (J+1? normalement vide)
-        reservations_aujourdhui = Reservation.objects.filter(
+        # Récupérer toutes les affectations pour aujourd'hui
+        affectations_aujourdhui = Affectation.objects.filter(date_reelle=date_obj)
+        
+        # Créer un dictionnaire des agents occupés par heure
+        agents_occupes_par_heure = {}
+        for affectation in affectations_aujourdhui:
+            try:
+                course = affectation.course
+                if course and course.heure is not None:
+                    heure_course = course.heure
+                    if heure_course not in agents_occupes_par_heure:
+                        agents_occupes_par_heure[heure_course] = []
+                    agents_occupes_par_heure[heure_course].append(affectation.agent_id)
+            except:
+                pass
+        
+        # Exclure seulement les agents qui ont une course à la même heure
+        agents_exclus_par_heure = agents_occupes_par_heure.get(heure_int, [])
+        print(f"🕒 {heure_int}h: {len(agents_exclus_par_heure)} agent(s) exclus (ceux déjà à {heure_int}h)")
+        
+        # Réservations pour cette date
+        reservations_date = Reservation.objects.filter(
             date_reservation=date_obj,
             statut__in=['reservee', 'confirmee']
         ).select_related('chauffeur', 'agent')
         
-        reservations_filtrees = [r for r in reservations_aujourdhui if r.type_transport == type_transport]
+        reservations_filtrees = [r for r in reservations_date if r.type_transport == type_transport]
         
         tous_agents = Agent.objects.filter(voiture_personnelle=False).order_by('nom')
         
@@ -2734,7 +2795,7 @@ def api_agents_disponibles(request):
         
         agents_reserves = []
         agents_disponibles = []
-        agents_exclus = []  # Agents dans une course aujourd'hui
+        agents_exclus = []
         
         for agent in tous_agents:
             est_programme = True
@@ -2752,15 +2813,15 @@ def api_agents_disponibles(request):
                 'peut_reserver': True
             }
             
-            # ✅ Vérifier si déjà dans UNE COURSE AUJOURD'HUI (peu importe l'heure)
-            if agent.id in agents_deja_dans_course:
+            # Vérifier si l'agent est déjà dans une course à cette heure
+            if agent.id in agents_exclus_par_heure:
                 agent_data['est_exclu'] = True
                 agent_data['peut_reserver'] = False
-                agent_data['message'] = "Déjà transporté aujourd'hui"
+                agent_data['message'] = f"Déjà dans une course à {heure_int}h"
                 agents_exclus.append(agent_data)
                 continue
             
-            # Réservé pour demain ? (disponible aujourd'hui)
+            # Vérifier les réservations
             if agent.id in reservations_par_agent:
                 agent_data.update(reservations_par_agent[agent.id])
                 agent_data['est_reserve'] = True
@@ -2777,8 +2838,6 @@ def api_agents_disponibles(request):
         agents_final.extend(agents_disponibles_programmes)
         agents_final.extend(agents_disponibles_non_programmes)
         agents_final.extend(agents_reserves)
-        # Les exclus ne sont PAS inclus dans la liste principale
-        # (ils seront dans stats.exclus)
         
         stats = {
             'total': len(agents_final),
@@ -2789,6 +2848,8 @@ def api_agents_disponibles(request):
             'exclus': len(agents_exclus),
             'mes_reserves': len([a for a in agents_reserves if a.get('est_mien', False)])
         }
+        
+        print(f"✅ Résultat: {stats['disponibles']} agents disponibles, {stats['exclus']} exclus")
         
         return JsonResponse({
             'success': True,
@@ -2802,6 +2863,8 @@ def api_agents_disponibles(request):
         
     except Exception as e:
         print(f"❌ Erreur: {e}")
+        import traceback
+        traceback.print_exc()
         return JsonResponse({'success': False, 'error': str(e)})
 @csrf_exempt
 @require_POST
