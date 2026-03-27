@@ -2325,7 +2325,7 @@ def api_creer_course(request):
         
         print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle: {heure_actuelle}h, Date actuelle: {date_actuelle}, Date demandée: {date_obj}")
         
-        # ✅ CORRECTION POUR 00h: Gestion spéciale pour les courses à minuit
+        # ✅ CORRECTION POUR 00h: Gestion spéciale de la date
         if heure_int == 0:
             # Pour 00h, on autorise la création si:
             # 1. La date est aujourd'hui (début de journée)
@@ -2335,7 +2335,7 @@ def api_creer_course(request):
                 # Création pour aujourd'hui à minuit (début de journée)
                 print(f"🕛 Création course pour aujourd'hui à 00h - AUTORISÉ")
             elif date_obj == date_actuelle + timedelta(days=1):
-                # Création pour demain à minuit (si on est après 00h)
+                # Création pour demain à minuit (si on est après minuit)
                 print(f"🕛 Création course pour demain à 00h - AUTORISÉ")
                 # On force la date à aujourd'hui pour la création
                 date_obj = date_actuelle
@@ -2352,7 +2352,7 @@ def api_creer_course(request):
                     'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
                 }, status=400)
         
-        # Heures de nuit (00h-03h) : vérification spéciale
+        # ✅ CORRECTION: Vérification des heures de nuit
         if heure_int < 4:
             # Pour 00h, on autorise (c'est une heure de début de journée)
             if heure_int == 0:
@@ -2480,8 +2480,7 @@ def api_creer_course(request):
                 agent = Agent.objects.get(id=agent_id)
                 print(f"✅ Agent trouvé: {agent.nom} (ID: {agent.id})")
                 
-                # Vérifier si l'agent n'est pas déjà affecté pour cette heure (et non pour toute la journée)
-                # Pour 00h, on vérifie spécifiquement l'heure
+                # ✅ CORRECTION: Vérifier si l'agent n'est pas déjà affecté à CETTE HEURE
                 existe_deja = Affectation.objects.filter(
                     agent=agent,
                     date_reelle=date_obj,
@@ -2647,6 +2646,7 @@ def api_creer_course(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
 @csrf_exempt
 @require_GET
 def api_agents_disponibles(request):
@@ -2672,26 +2672,30 @@ def api_agents_disponibles(request):
         aujourd_hui = timezone.now().date()
         heure_int = int(heure)
         
-        # ✅ CORRECTION: Si l'heure est 00h, on permet de créer pour le jour suivant
-        # car à minuit, c'est techniquement le début du nouveau jour
+        # ✅ CORRECTION POUR 00h: Gestion spéciale
         if heure_int == 0:
-            # Pour 00h, on autorise à créer des courses pour aujourd'hui OU demain
-            # selon le contexte
+            # Pour 00h, on permet de créer des courses pour:
+            # - Aujourd'hui (début de journée)
+            # - OU Demain (si on est après minuit)
             if date_obj == aujourd_hui:
-                # C'est bon, on crée pour aujourd'hui à minuit
-                print(f"🕛 Création course pour aujourd'hui à 00h")
+                print(f"🕛 Création course pour aujourd'hui à 00h - AUTORISÉ")
             elif date_obj == aujourd_hui + timedelta(days=1):
-                # Si on est à 00h, on autorise aussi pour demain (car minuit commence le nouveau jour)
-                print(f"🕛 Création course pour demain à 00h")
-                # On force la date à aujourd'hui pour éviter les problèmes
+                print(f"🕛 Création course pour demain à 00h - AUTORISÉ")
+                # On force la date à aujourd'hui pour la recherche
                 date_obj = aujourd_hui
                 date_str = aujourd_hui.isoformat()
             else:
-                return JsonResponse({'success': False, 'error': "Vous ne pouvez créer des courses que pour aujourd'hui"})
+                return JsonResponse({
+                    'success': False, 
+                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                })
         else:
             # Pour les autres heures, vérification normale
             if date_obj != aujourd_hui:
-                return JsonResponse({'success': False, 'error': "Vous ne pouvez créer des courses que pour aujourd'hui"})
+                return JsonResponse({
+                    'success': False, 
+                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                })
         
         print(f"🔍 Recherche agents pour: {date_obj} - {type_transport} - {heure_int}h")
         
@@ -2752,10 +2756,7 @@ def api_agents_disponibles(request):
             })
         
         # ========== RÉCUPÉRER LES AGENTS ==========
-        # Vérifier les agents déjà dans une course à cette heure
-        courses_aujourdhui = Course.objects.filter(date_reelle=date_obj)
-        
-        # Récupérer toutes les affectations pour aujourd'hui
+        # ✅ CORRECTION: Vérifier les agents déjà dans une course à la MÊME HEURE seulement
         affectations_aujourdhui = Affectation.objects.filter(date_reelle=date_obj)
         
         # Créer un dictionnaire des agents occupés par heure
@@ -2771,17 +2772,17 @@ def api_agents_disponibles(request):
             except:
                 pass
         
-        # Exclure seulement les agents qui ont une course à la même heure
+        # Exclure seulement les agents qui ont une course à la MÊME HEURE
         agents_exclus_par_heure = agents_occupes_par_heure.get(heure_int, [])
         print(f"🕒 {heure_int}h: {len(agents_exclus_par_heure)} agent(s) exclus (ceux déjà à {heure_int}h)")
         
-        # Réservations pour cette date
-        reservations_date = Reservation.objects.filter(
+        # Réservations pour aujourd'hui
+        reservations_aujourdhui = Reservation.objects.filter(
             date_reservation=date_obj,
             statut__in=['reservee', 'confirmee']
         ).select_related('chauffeur', 'agent')
         
-        reservations_filtrees = [r for r in reservations_date if r.type_transport == type_transport]
+        reservations_filtrees = [r for r in reservations_aujourdhui if r.type_transport == type_transport]
         
         tous_agents = Agent.objects.filter(voiture_personnelle=False).order_by('nom')
         
@@ -2813,7 +2814,7 @@ def api_agents_disponibles(request):
                 'peut_reserver': True
             }
             
-            # Vérifier si l'agent est déjà dans une course à cette heure
+            # ✅ Vérifier si l'agent est déjà dans une course à CETTE HEURE
             if agent.id in agents_exclus_par_heure:
                 agent_data['est_exclu'] = True
                 agent_data['peut_reserver'] = False
@@ -2821,7 +2822,7 @@ def api_agents_disponibles(request):
                 agents_exclus.append(agent_data)
                 continue
             
-            # Vérifier les réservations
+            # Réservé pour cette heure ?
             if agent.id in reservations_par_agent:
                 agent_data.update(reservations_par_agent[agent.id])
                 agent_data['est_reserve'] = True
@@ -2866,6 +2867,7 @@ def api_agents_disponibles(request):
         import traceback
         traceback.print_exc()
         return JsonResponse({'success': False, 'error': str(e)})
+
 @csrf_exempt
 @require_POST
 def api_terminer_course(request):
