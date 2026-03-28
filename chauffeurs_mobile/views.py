@@ -2346,31 +2346,24 @@ def api_creer_course(request):
         print(f"📅 Date demandée: {date_obj}, Date actuelle: {date_actuelle}")
         
         # ✅ CORRECTION: Gestion des heures de nuit (00h-04h)
-        # Entre minuit et 4h, on travaille encore pour la date d'hier
         date_a_utiliser = date_obj
         
         if heure_actuelle < 4:
-            # On est dans la nuit (00h-04h)
-            # On doit pouvoir créer des courses pour la date d'hier
             date_hier = date_actuelle - timedelta(days=1)
             
             if date_obj == date_actuelle:
-                # Si l'utilisateur demande aujourd'hui, on le redirige vers hier
                 print(f"🌙 Nuit détectée (actuellement {heure_actuelle}h) - Redirection vers hier ({date_hier})")
                 date_a_utiliser = date_hier
             elif date_obj == date_hier:
                 print(f"✅ Date demandée correspond à hier ({date_hier}) - OK")
                 date_a_utiliser = date_hier
             else:
-                print(f"❌ Date {date_obj} invalide pour la nuit (attendu {date_hier})")
                 return JsonResponse({
                     'success': False,
                     'error': f"Entre {heure_actuelle}h et 4h, vous ne pouvez créer des courses que pour {date_hier}"
                 }, status=400)
         else:
-            # Journée normale (après 4h)
             if date_obj != date_actuelle:
-                print(f"❌ Date {date_obj} != {date_actuelle}")
                 return JsonResponse({
                     'success': False,
                     'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
@@ -2378,12 +2371,26 @@ def api_creer_course(request):
         
         print(f"📅 Date utilisée pour la création: {date_a_utiliser}")
         
-        # ✅ Vérification des heures: Pour les heures de nuit, on autorise
+        # ✅ Conversion du jour en français
+        jours_fr = {
+            'Monday': 'Lundi',
+            'Tuesday': 'Mardi',
+            'Wednesday': 'Mercredi',
+            'Thursday': 'Jeudi',
+            'Friday': 'Vendredi',
+            'Saturday': 'Samedi',
+            'Sunday': 'Dimanche'
+        }
+        
+        jour_anglais = date_a_utiliser.strftime('%A')
+        jour_francais = jours_fr.get(jour_anglais, jour_anglais)
+        
+        print(f"📅 Jour: {jour_anglais} -> {jour_francais}")
+        
+        # ✅ Vérification des heures
         if heure_int < 4:
-            # Heures de nuit (00h-03h) - AUTORISÉES
             print(f"🌙 Heure de nuit {heure_int}h - AUTORISÉE")
         else:
-            # Heures de jour - vérification
             if heure_int > heure_actuelle:
                 print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
                 return JsonResponse({
@@ -2414,7 +2421,6 @@ def api_creer_course(request):
         
         if course_existante:
             print(f"⚠️ Course déjà existante ID: {course_existante.id}")
-            # Vérifier si les agents sont déjà affectés
             agents_deja_affectes = Affectation.objects.filter(
                 course=course_existante,
                 agent_id__in=agents_ids
@@ -2430,7 +2436,6 @@ def api_creer_course(request):
                     'agents_affectes': [a.nom for a in course_existante.affectation_set.select_related('agent').all() if a.agent]
                 })
             
-            # Ajouter les nouveaux agents
             course = course_existante
             created = False
         else:
@@ -2439,12 +2444,12 @@ def api_creer_course(request):
                 date_reelle=date_a_utiliser,
                 type_transport=type_transport,
                 heure=heure_int,
-                jour=date_a_utiliser.strftime('%A'),
+                jour=jour_francais,  # ✅ Utilisation du jour en français
                 statut='en_attente'
             )
             course.save()
             created = True
-            print(f"✅ Nouvelle course créée ID: {course.id}")
+            print(f"✅ Nouvelle course créée ID: {course.id} avec jour: {jour_francais}")
         
         # ========== CHARGER LE PLANNING POUR VÉRIFICATION ==========
         agents_hors_planning = []
@@ -2460,8 +2465,6 @@ def api_creer_course(request):
                 planning_charge = True
                 print("✅ Planning chargé depuis la session")
                 
-                # Convertir la date en jour de semaine
-                jours_fr = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
                 date_str_formatted = date_a_utiliser.strftime("%d/%m/%Y")
                 
                 jour_correspondant = None
@@ -2498,7 +2501,6 @@ def api_creer_course(request):
         
         for agent_id in agents_ids:
             try:
-                # Convertir en entier si c'est une string
                 if isinstance(agent_id, str):
                     try:
                         agent_id = int(agent_id)
@@ -2509,7 +2511,6 @@ def api_creer_course(request):
                 agent = Agent.objects.get(id=agent_id)
                 print(f"✅ Agent trouvé: {agent.nom} (ID: {agent.id})")
                 
-                # Vérifier si l'agent n'est pas déjà affecté à CETTE HEURE
                 existe_deja = Affectation.objects.filter(
                     agent=agent,
                     date_reelle=date_a_utiliser,
@@ -2523,14 +2524,13 @@ def api_creer_course(request):
                         agent=agent,
                         type_transport=type_transport,
                         heure=heure_int,
-                        jour=date_a_utiliser.strftime('%A'),
+                        jour=jour_francais,  # ✅ Utilisation du jour en français
                         date_reelle=date_a_utiliser,
                         prix_course=course.get_prix_course() if hasattr(course, 'get_prix_course') else 0
                     )
                     agents_affectes.append(agent)
                     print(f"  ✅ Agent {agent.nom} affecté")
                     
-                    # VÉRIFICATION HORS PLANNING
                     if planning_charge and agents_programmes:
                         nom_normalise = agent.nom.strip().lower()
                         
@@ -2538,7 +2538,6 @@ def api_creer_course(request):
                             print(f"  🚨 AGENT HORS PLANNING: {agent.nom}")
                             agents_hors_planning.append(agent)
                             
-                            # NOTIFICATION ADMIN
                             try:
                                 from gestion.models import NotificationAdmin
                                 
@@ -2557,7 +2556,6 @@ def api_creer_course(request):
                             except Exception as e:
                                 print(f"  ❌ Erreur création notification admin: {e}")
                             
-                            # NOTIFICATION POUR SUPER CHAUFFEURS
                             try:
                                 from chauffeurs_mobile.models import MobileNotification
                                 
@@ -2602,11 +2600,9 @@ def api_creer_course(request):
                 agents_non_trouves.append(agent_id)
                 continue
         
-        # Mettre à jour le statut
         if course.statut == 'en_attente':
             course.save()
         
-        # ========== PRÉPARER LA RÉPONSE ==========
         total_notifications = notifications_crees + super_notifications_crees
         
         response_data = {
@@ -2616,6 +2612,7 @@ def api_creer_course(request):
             'agents_affectes': [a.nom for a in agents_affectes],
             'created': created,
             'date_utilisee': date_a_utiliser.isoformat(),
+            'jour_francais': jour_francais,  # ✅ Ajout du jour en français dans la réponse
             'date_originale': date_str,
             'nuit_mode': heure_actuelle < 4,
             'debug': {
@@ -2636,6 +2633,7 @@ def api_creer_course(request):
         
         print("="*60)
         print(f"✅ Course créée avec {len(agents_affectes)} agents")
+        print(f"📅 Jour enregistré: {jour_francais}")
         print("="*60)
         
         return JsonResponse(response_data)
