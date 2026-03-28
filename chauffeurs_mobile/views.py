@@ -2305,36 +2305,22 @@ def api_creer_course(request):
         
         # Vérification des données
         if not date_str:
-            return JsonResponse({
-                'success': False,
-                'error': 'Date manquante'
-            }, status=400)
+            return JsonResponse({'success': False, 'error': 'Date manquante'}, status=400)
         
         if not type_transport:
-            return JsonResponse({
-                'success': False,
-                'error': 'Type de transport manquant'
-            }, status=400)
+            return JsonResponse({'success': False, 'error': 'Type de transport manquant'}, status=400)
         
         if heure is None:
-            return JsonResponse({
-                'success': False,
-                'error': 'Heure manquante'
-            }, status=400)
+            return JsonResponse({'success': False, 'error': 'Heure manquante'}, status=400)
         
         if not agents_ids or len(agents_ids) == 0:
-            return JsonResponse({
-                'success': False,
-                'error': 'Aucun agent sélectionné'
-            }, status=400)
+            return JsonResponse({'success': False, 'error': 'Aucun agent sélectionné'}, status=400)
         
-        # IMPORTANT: Utiliser datetime.now() pour l'heure locale
         from datetime import datetime
         now = datetime.now()
         heure_actuelle = now.hour
         date_actuelle = now.date()
         
-        # Valider la date
         try:
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
@@ -2345,13 +2331,23 @@ def api_creer_course(request):
         print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle: {heure_actuelle}h")
         print(f"📅 Date demandée: {date_obj}, Date actuelle: {date_actuelle}")
         
-        # ✅ CORRECTION: Gestion des heures de nuit (00h-04h)
+        # ✅ CORRECTION CRITIQUE: Gestion du cycle de travail 6h-4h
+        # Une course à 23h est dans la même journée de travail que les courses de 6h à 23h
         date_a_utiliser = date_obj
         
-        if heure_actuelle < 4:
+        if heure_actuelle >= 6:
+            # On est dans la journée de travail (6h à 23h59)
+            if date_obj != date_actuelle:
+                return JsonResponse({
+                    'success': False,
+                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                }, status=400)
+        else:
+            # On est dans la nuit (00h à 5h) - ça fait partie de la journée d'hier
             date_hier = date_actuelle - timedelta(days=1)
             
             if date_obj == date_actuelle:
+                # Si l'utilisateur demande aujourd'hui, on le redirige vers hier
                 print(f"🌙 Nuit détectée (actuellement {heure_actuelle}h) - Redirection vers hier ({date_hier})")
                 date_a_utiliser = date_hier
             elif date_obj == date_hier:
@@ -2360,18 +2356,35 @@ def api_creer_course(request):
             else:
                 return JsonResponse({
                     'success': False,
-                    'error': f"Entre {heure_actuelle}h et 4h, vous ne pouvez créer des courses que pour {date_hier}"
-                }, status=400)
-        else:
-            if date_obj != date_actuelle:
-                return JsonResponse({
-                    'success': False,
-                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                    'error': f"Entre 00h et 5h, vous ne pouvez créer des courses que pour {date_hier}"
                 }, status=400)
         
         print(f"📅 Date utilisée pour la création: {date_a_utiliser}")
         
-        # ✅ Conversion du jour en français
+        # ✅ CORRECTION: Vérification des heures selon le cycle de travail
+        # Une course à 23h est considérée comme "passée" mais dans la même journée
+        # Donc on autorise TOUTES les heures de 0h à 23h pour la date correcte
+        # La seule restriction est qu'on ne peut pas créer une course pour une heure FUTURE
+        # qui n'est pas encore arrivée dans la journée de travail actuelle
+        
+        # Déterminer si l'heure demandée est dans la même journée de travail
+        if heure_actuelle >= 6:
+            # On est dans la journée de travail (6h à 23h59)
+            # On ne peut créer que pour les heures PASSÉES de cette journée
+            if heure_int > heure_actuelle:
+                print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future). Les courses ne peuvent être créées que pour les heures déjà passées."
+                }, status=400)
+            else:
+                print(f"  ✅ Heure {heure_int}h (passée ou actuelle) - autorisée")
+        else:
+            # On est dans la nuit (00h à 5h)
+            # On travaille pour la journée d'hier, donc toutes les heures de 0h à 23h sont passées
+            print(f"  ✅ Nuit détectée - toutes les heures sont considérées comme passées")
+        
+        # Conversion du jour en français
         jours_fr = {
             'Monday': 'Lundi',
             'Tuesday': 'Mardi',
@@ -2387,22 +2400,8 @@ def api_creer_course(request):
         
         print(f"📅 Jour: {jour_anglais} -> {jour_francais}")
         
-        # ✅ Vérification des heures
-        if heure_int < 4:
-            print(f"🌙 Heure de nuit {heure_int}h - AUTORISÉE")
-        else:
-            if heure_int > heure_actuelle:
-                print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
-                return JsonResponse({
-                    'success': False,
-                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future)."
-                }, status=400)
-        
-        print(f"  ✅ Heure {heure_int}h - autorisée")
-        
         # =================================================
         
-        # Récupérer les modèles
         from django.apps import apps
         Course = apps.get_model('gestion', 'Course')
         Affectation = apps.get_model('gestion', 'Affectation')
@@ -2444,14 +2443,14 @@ def api_creer_course(request):
                 date_reelle=date_a_utiliser,
                 type_transport=type_transport,
                 heure=heure_int,
-                jour=jour_francais,  # ✅ Utilisation du jour en français
+                jour=jour_francais,
                 statut='en_attente'
             )
             course.save()
             created = True
             print(f"✅ Nouvelle course créée ID: {course.id} avec jour: {jour_francais}")
         
-        # ========== CHARGER LE PLANNING POUR VÉRIFICATION ==========
+        # ========== CHARGER LE PLANNING ==========
         agents_hors_planning = []
         planning_charge = False
         agents_programmes = []
@@ -2524,7 +2523,7 @@ def api_creer_course(request):
                         agent=agent,
                         type_transport=type_transport,
                         heure=heure_int,
-                        jour=jour_francais,  # ✅ Utilisation du jour en français
+                        jour=jour_francais,
                         date_reelle=date_a_utiliser,
                         prix_course=course.get_prix_course() if hasattr(course, 'get_prix_course') else 0
                     )
@@ -2612,9 +2611,9 @@ def api_creer_course(request):
             'agents_affectes': [a.nom for a in agents_affectes],
             'created': created,
             'date_utilisee': date_a_utiliser.isoformat(),
-            'jour_francais': jour_francais,  # ✅ Ajout du jour en français dans la réponse
+            'jour_francais': jour_francais,
             'date_originale': date_str,
-            'nuit_mode': heure_actuelle < 4,
+            'nuit_mode': heure_actuelle < 6,
             'debug': {
                 'planning_charge': planning_charge,
                 'agents_programmes_count': len(agents_programmes),
@@ -2650,7 +2649,7 @@ def api_creer_course(request):
 @csrf_exempt
 @require_GET
 def api_agents_disponibles(request):
-    """API pour voir les agents disponibles - CORRIGÉ POUR GÉRER LES HEURES DE NUIT (00h-04h)"""
+    """API pour voir les agents disponibles - CORRIGÉ POUR CYCLE 6h-4h"""
     chauffeur_id = request.session.get('chauffeur_id')
     
     if not chauffeur_id:
@@ -2677,13 +2676,20 @@ def api_agents_disponibles(request):
         print(f"🔍 Recherche agents pour: {date_obj} - {type_transport} - {heure_int}h")
         print(f"🕐 Heure actuelle: {maintenant_heure}h, Date actuelle: {maintenant_date}")
         
-        # ✅ CORRECTION: Gestion des heures de nuit (00h-04h)
-        # Entre minuit et 4h, on travaille encore pour la date d'hier
+        # ✅ CORRECTION: Gestion du cycle de travail 6h-4h
+        # Une journée de travail commence à 6h et se termine à 4h le lendemain
         date_a_utiliser = date_obj
         
-        if maintenant_heure < 4:
-            # On est dans la nuit (00h-04h)
-            # On doit pouvoir créer des courses pour la date d'hier
+        # Déterminer si la date demandée correspond à la journée de travail actuelle
+        if maintenant_heure >= 6:
+            # On est dans la journée de travail (6h à 23h59)
+            if date_obj != maintenant_date:
+                return JsonResponse({
+                    'success': False,
+                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                })
+        else:
+            # On est dans la nuit (00h à 5h) - ça fait partie de la journée d'hier
             date_hier = maintenant_date - timedelta(days=1)
             
             if date_obj == maintenant_date:
@@ -2696,14 +2702,7 @@ def api_agents_disponibles(request):
             else:
                 return JsonResponse({
                     'success': False,
-                    'error': f"Entre {maintenant_heure}h et 4h, vous ne pouvez créer des courses que pour {date_hier}"
-                })
-        else:
-            # Journée normale (après 4h)
-            if date_obj != maintenant_date:
-                return JsonResponse({
-                    'success': False,
-                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                    'error': f"Entre 00h et 5h, vous ne pouvez créer des courses que pour {date_hier}"
                 })
         
         print(f"📅 Date utilisée pour la recherche: {date_a_utiliser}")
@@ -2719,7 +2718,6 @@ def api_agents_disponibles(request):
             
             if gestionnaire.recharger_planning_depuis_session():
                 jours_fr = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
-                jour_semaine = jours_fr[date_a_utiliser.weekday()]
                 date_str_formatted = date_a_utiliser.strftime("%d/%m/%Y")
                 
                 jour_correspondant = None
@@ -2737,7 +2735,7 @@ def api_agents_disponibles(request):
                                 'heure_ete': False,
                                 'filtre_agents': 'tous'
                             }
-                            self.data = {'heure_specifique': str(heure_valeur)}
+                            self.data = {'heure_specifique': str(heure_int)}
                     
                     form_filtre = FiltreFormPlanning(jour_correspondant, type_transport, heure_int)
                     liste_transports = gestionnaire.traiter_donnees(form_filtre)
@@ -2767,7 +2765,6 @@ def api_agents_disponibles(request):
         # ========== RÉCUPÉRER LES AGENTS ==========
         affectations_aujourdhui = Affectation.objects.filter(date_reelle=date_a_utiliser)
         
-        # Créer un dictionnaire des agents occupés par heure
         agents_occupes_par_heure = {}
         for affectation in affectations_aujourdhui:
             try:
@@ -2780,11 +2777,9 @@ def api_agents_disponibles(request):
             except:
                 pass
         
-        # Exclure seulement les agents qui ont une course à la MÊME HEURE
         agents_exclus_par_heure = agents_occupes_par_heure.get(heure_int, [])
-        print(f"🕒 {heure_int}h: {len(agents_exclus_par_heure)} agent(s) exclus (ceux déjà à {heure_int}h)")
+        print(f"🕒 {heure_int}h: {len(agents_exclus_par_heure)} agent(s) exclus")
         
-        # Réservations
         reservations_date = Reservation.objects.filter(
             date_reservation=date_a_utiliser,
             statut__in=['reservee', 'confirmee']
@@ -2822,7 +2817,6 @@ def api_agents_disponibles(request):
                 'peut_reserver': True
             }
             
-            # Vérifier si l'agent est déjà dans une course à CETTE HEURE
             if agent.id in agents_exclus_par_heure:
                 agent_data['est_exclu'] = True
                 agent_data['peut_reserver'] = False
@@ -2830,7 +2824,6 @@ def api_agents_disponibles(request):
                 agents_exclus.append(agent_data)
                 continue
             
-            # Réservé ?
             if agent.id in reservations_par_agent:
                 agent_data.update(reservations_par_agent[agent.id])
                 agent_data['est_reserve'] = True
@@ -2839,7 +2832,6 @@ def api_agents_disponibles(request):
             else:
                 agents_disponibles.append(agent_data)
         
-        # ========== ORGANISER L'AFFICHAGE ==========
         agents_disponibles_programmes = [a for a in agents_disponibles if a.get('est_programme', True)]
         agents_disponibles_non_programmes = [a for a in agents_disponibles if not a.get('est_programme', True)]
         
@@ -2867,7 +2859,7 @@ def api_agents_disponibles(request):
             'date_originale': date_str,
             'type_transport': type_transport,
             'heure': heure_int,
-            'nuit_mode': maintenant_heure < 4
+            'nuit_mode': maintenant_heure < 6
         })
         
     except Exception as e:
