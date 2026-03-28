@@ -2297,16 +2297,35 @@ def api_creer_course(request):
         
         print("="*60)
         print(f"📝 CRÉATION COURSE")
-        print(f"📅 Date: {date_str}")
+        print(f"📅 Date reçue: {date_str}")
         print(f"🚗 Type: {type_transport}")
         print(f"⏰ Heure: {heure}")
         print(f"👥 Agents IDs reçus: {agents_ids}")
         print("="*60)
         
-        if not all([date_str, type_transport, heure, agents_ids]):
+        # ✅ CORRECTION: Vérification des données AVANT la validation de date
+        if not date_str:
             return JsonResponse({
                 'success': False,
-                'error': 'Données manquantes'
+                'error': 'Date manquante'
+            }, status=400)
+        
+        if not type_transport:
+            return JsonResponse({
+                'success': False,
+                'error': 'Type de transport manquant'
+            }, status=400)
+        
+        if heure is None:
+            return JsonResponse({
+                'success': False,
+                'error': 'Heure manquante'
+            }, status=400)
+        
+        if not agents_ids or len(agents_ids) == 0:
+            return JsonResponse({
+                'success': False,
+                'error': 'Aucun agent sélectionné'
             }, status=400)
         
         # IMPORTANT: Utiliser datetime.now() pour l'heure locale
@@ -2323,9 +2342,11 @@ def api_creer_course(request):
         
         heure_int = int(heure)
         
-        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle: {heure_actuelle}h, Date actuelle: {date_actuelle}, Date demandée: {date_obj}")
+        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle: {heure_actuelle}h")
+        print(f"📅 Date demandée: {date_obj}, Date actuelle: {date_actuelle}")
         
         # ✅ CORRECTION POUR 00h: Gestion spéciale de la date
+        date_originale = date_obj
         if heure_int == 0:
             # Pour 00h, on autorise la création si:
             # 1. La date est aujourd'hui (début de journée)
@@ -2339,14 +2360,17 @@ def api_creer_course(request):
                 print(f"🕛 Création course pour demain à 00h - AUTORISÉ")
                 # On force la date à aujourd'hui pour la création
                 date_obj = date_actuelle
+                print(f"📅 Date forcée à: {date_obj}")
             else:
+                print(f"❌ Date {date_obj} invalide pour 00h (attendu {date_actuelle} ou {date_actuelle + timedelta(days=1)})")
                 return JsonResponse({
                     'success': False,
-                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                    'error': f"Vous ne pouvez créer des courses pour 00h que pour aujourd'hui ou demain"
                 }, status=400)
         else:
             # Pour les autres heures, vérification normale
             if date_obj != date_actuelle:
+                print(f"❌ Date {date_obj} != {date_actuelle}")
                 return JsonResponse({
                     'success': False,
                     'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
@@ -2387,6 +2411,48 @@ def api_creer_course(request):
         
         chauffeur = Chauffeur.objects.get(id=chauffeur_id)
         
+        # ========== VÉRIFIER SI LA COURSE EXISTE DÉJÀ ==========
+        course_existante = Course.objects.filter(
+            chauffeur=chauffeur,
+            date_reelle=date_obj,
+            type_transport=type_transport,
+            heure=heure_int
+        ).first()
+        
+        if course_existante:
+            print(f"⚠️ Course déjà existante ID: {course_existante.id}")
+            # Vérifier si les agents sont déjà affectés
+            agents_deja_affectes = Affectation.objects.filter(
+                course=course_existante,
+                agent_id__in=agents_ids
+            ).values_list('agent_id', flat=True)
+            
+            agents_a_ajouter = [aid for aid in agents_ids if aid not in agents_deja_affectes]
+            
+            if not agents_a_ajouter:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Course déjà existante',
+                    'course_id': course_existante.id,
+                    'agents_affectes': [a.nom for a in course_existante.affectation_set.select_related('agent').all() if a.agent]
+                })
+            
+            # Ajouter les nouveaux agents
+            course = course_existante
+            created = False
+        else:
+            course = Course(
+                chauffeur=chauffeur,
+                date_reelle=date_obj,
+                type_transport=type_transport,
+                heure=heure_int,
+                jour=date_obj.strftime('%A'),
+                statut='en_attente'
+            )
+            course.save()
+            created = True
+            print(f"✅ Nouvelle course créée ID: {course.id}")
+        
         # ========== CHARGER LE PLANNING POUR VÉRIFICATION ==========
         agents_hors_planning = []
         planning_charge = False
@@ -2400,9 +2466,6 @@ def api_creer_course(request):
             if gestionnaire.recharger_planning_depuis_session():
                 planning_charge = True
                 print("✅ Planning chargé depuis la session")
-                
-                # Afficher les dates disponibles
-                print(f"📅 Dates planning: {gestionnaire.dates_par_jour}")
                 
                 # Convertir la date en jour de semaine
                 jours_fr = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
@@ -2439,29 +2502,12 @@ def api_creer_course(request):
                     print(f"📋 Agents programmés ({len(agents_programmes)}): {agents_programmes[:10]}")
                 else:
                     print(f"❌ Date {date_str_formatted} non trouvée dans le planning")
-                    print(f"📅 Dates disponibles: {dates_par_jour}")
             else:
                 print("⚠️ Planning non chargé dans la session")
         except Exception as e:
             print(f"⚠️ Erreur chargement planning: {e}")
-            import traceback
-            traceback.print_exc()
         
-        # ========== CRÉER LA COURSE ==========
-        course, created = Course.objects.get_or_create(
-            chauffeur=chauffeur,
-            date_reelle=date_obj,
-            type_transport=type_transport,
-            heure=heure_int,
-            defaults={
-                'jour': date_obj.strftime('%A'),
-                'statut': 'en_attente'
-            }
-        )
-        
-        print(f"📌 Course: {course.id} (created: {created})")
-        
-        # Ajouter les affectations
+        # ========== AJOUTER LES AFFECTATIONS ==========
         agents_affectes = []
         agents_non_trouves = []
         notifications_crees = 0
@@ -2480,11 +2526,11 @@ def api_creer_course(request):
                 agent = Agent.objects.get(id=agent_id)
                 print(f"✅ Agent trouvé: {agent.nom} (ID: {agent.id})")
                 
-                # ✅ CORRECTION: Vérifier si l'agent n'est pas déjà affecté à CETTE HEURE
+                # ✅ Vérifier si l'agent n'est pas déjà affecté à CETTE HEURE
                 existe_deja = Affectation.objects.filter(
                     agent=agent,
                     date_reelle=date_obj,
-                    heure=heure_int  # Vérifier seulement pour la même heure
+                    heure=heure_int
                 ).exists()
                 
                 if not existe_deja:
@@ -2499,8 +2545,9 @@ def api_creer_course(request):
                         prix_course=course.get_prix_course() if hasattr(course, 'get_prix_course') else 0
                     )
                     agents_affectes.append(agent)
+                    print(f"  ✅ Agent {agent.nom} affecté")
                     
-                    # ========== VÉRIFICATION HORS PLANNING AVEC NOTIFICATIONS ==========
+                    # ========== VÉRIFICATION HORS PLANNING ==========
                     if planning_charge and agents_programmes:
                         nom_normalise = agent.nom.strip().lower()
                         
@@ -2533,18 +2580,16 @@ def api_creer_course(request):
                             try:
                                 from chauffeurs_mobile.models import MobileNotification
                                 
-                                # Récupérer tous les super-chauffeurs actifs
                                 super_chauffeurs = Chauffeur.objects.filter(
                                     super_chauffeur=True,
                                     actif=True
                                 )
                                 
                                 for super_chauffeur in super_chauffeurs:
-                                    # Ne pas notifier le chauffeur qui a créé la course
                                     if super_chauffeur.id == chauffeur.id:
                                         continue
                                     
-                                    super_notif = MobileNotification.objects.create(
+                                    MobileNotification.objects.create(
                                         chauffeur=super_chauffeur,
                                         type_notification='alerte',
                                         message=f"🚨 Agent {agent.nom} transporté hors planning par {chauffeur.nom} à {course.heure}h",
@@ -2564,17 +2609,11 @@ def api_creer_course(request):
                                     super_notifications_crees += 1
                                     print(f"  📢 Notification envoyée à super-chauffeur: {super_chauffeur.nom}")
                                 
-                                print(f"  ✅ {super_notifications_crees} notification(s) super-chauffeur créée(s)")
-                                
-                            except ImportError:
-                                print("  ⚠️ Modèle MobileNotification non trouvé - notifications super désactivées")
                             except Exception as e:
                                 print(f"  ❌ Erreur création notification super: {e}")
                                 
                         else:
                             print(f"  ✅ Agent programmé")
-                    else:
-                        print(f"  ⚠️ Planning non chargé, pas de vérification")
                     
                 else:
                     print(f"⚠️ Agent {agent.nom} déjà affecté à {heure_int}h")
@@ -2588,9 +2627,9 @@ def api_creer_course(request):
                 agents_non_trouves.append(agent_id)
                 continue
         
-        # Mettre à jour le statut
-        course.statut = 'en_attente'
-        course.save()
+        # Mettre à jour le statut si nécessaire
+        if course.statut == 'en_attente':
+            course.save()
         
         # ========== PRÉPARER LA RÉPONSE ==========
         total_notifications = notifications_crees + super_notifications_crees
@@ -2601,6 +2640,8 @@ def api_creer_course(request):
             'course_id': course.id,
             'agents_affectes': [a.nom for a in agents_affectes],
             'created': created,
+            'date_utilisee': date_obj.isoformat(),
+            'date_originale': date_originale.isoformat() if date_originale else None,
             'debug': {
                 'planning_charge': planning_charge,
                 'agents_programmes_count': len(agents_programmes),
@@ -2624,13 +2665,6 @@ def api_creer_course(request):
                 },
                 'message': f"{len(agents_hors_planning)} agent(s) transporté(s) hors planning - {total_notifications} notification(s) créée(s)"
             }
-            print(f"🚨 {len(agents_hors_planning)} agent(s) hors planning détecté(s)!")
-            print(f"📨 Notifications: Admin={notifications_crees}, Super={super_notifications_crees}, Total={total_notifications}")
-        else:
-            print("✅ Aucun agent hors planning détecté")
-        
-        if agents_non_trouves:
-            print(f"⚠️ Agents non trouvés: {agents_non_trouves}")
         
         print("="*60)
         print(f"✅ Course créée avec {len(agents_affectes)} agents")
