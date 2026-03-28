@@ -2303,7 +2303,7 @@ def api_creer_course(request):
         print(f"👥 Agents IDs reçus: {agents_ids}")
         print("="*60)
         
-        # ✅ CORRECTION: Vérification des données AVANT la validation de date
+        # Vérification des données
         if not date_str:
             return JsonResponse({
                 'success': False,
@@ -2345,30 +2345,30 @@ def api_creer_course(request):
         print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle: {heure_actuelle}h")
         print(f"📅 Date demandée: {date_obj}, Date actuelle: {date_actuelle}")
         
-        # ✅ CORRECTION POUR 00h: Gestion spéciale de la date
-        date_originale = date_obj
-        if heure_int == 0:
-            # Pour 00h, on autorise la création si:
-            # 1. La date est aujourd'hui (début de journée)
-            # 2. OU la date est demain (si on est après minuit)
+        # ✅ CORRECTION: Gestion des heures de nuit (00h-04h)
+        # Entre minuit et 4h, on travaille encore pour la date d'hier
+        date_a_utiliser = date_obj
+        
+        if heure_actuelle < 4:
+            # On est dans la nuit (00h-04h)
+            # On doit pouvoir créer des courses pour la date d'hier
+            date_hier = date_actuelle - timedelta(days=1)
             
             if date_obj == date_actuelle:
-                # Création pour aujourd'hui à minuit (début de journée)
-                print(f"🕛 Création course pour aujourd'hui à 00h - AUTORISÉ")
-            elif date_obj == date_actuelle + timedelta(days=1):
-                # Création pour demain à minuit (si on est après minuit)
-                print(f"🕛 Création course pour demain à 00h - AUTORISÉ")
-                # On force la date à aujourd'hui pour la création
-                date_obj = date_actuelle
-                print(f"📅 Date forcée à: {date_obj}")
+                # Si l'utilisateur demande aujourd'hui, on le redirige vers hier
+                print(f"🌙 Nuit détectée (actuellement {heure_actuelle}h) - Redirection vers hier ({date_hier})")
+                date_a_utiliser = date_hier
+            elif date_obj == date_hier:
+                print(f"✅ Date demandée correspond à hier ({date_hier}) - OK")
+                date_a_utiliser = date_hier
             else:
-                print(f"❌ Date {date_obj} invalide pour 00h (attendu {date_actuelle} ou {date_actuelle + timedelta(days=1)})")
+                print(f"❌ Date {date_obj} invalide pour la nuit (attendu {date_hier})")
                 return JsonResponse({
                     'success': False,
-                    'error': f"Vous ne pouvez créer des courses pour 00h que pour aujourd'hui ou demain"
+                    'error': f"Entre {heure_actuelle}h et 4h, vous ne pouvez créer des courses que pour {date_hier}"
                 }, status=400)
         else:
-            # Pour les autres heures, vérification normale
+            # Journée normale (après 4h)
             if date_obj != date_actuelle:
                 print(f"❌ Date {date_obj} != {date_actuelle}")
                 return JsonResponse({
@@ -2376,20 +2376,14 @@ def api_creer_course(request):
                     'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
                 }, status=400)
         
-        # ✅ CORRECTION: Vérification des heures de nuit
+        print(f"📅 Date utilisée pour la création: {date_a_utiliser}")
+        
+        # ✅ Vérification des heures: Pour les heures de nuit, on autorise
         if heure_int < 4:
-            # Pour 00h, on autorise (c'est une heure de début de journée)
-            if heure_int == 0:
-                print(f"🕛 Heure 00h - AUTORISÉE pour début de journée")
-                # Continuer sans erreur
-            else:
-                print(f"  ❌ Heure de nuit {heure_int}h - INTERDITE")
-                return JsonResponse({
-                    'success': False,
-                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure de nuit)."
-                }, status=400)
+            # Heures de nuit (00h-03h) - AUTORISÉES
+            print(f"🌙 Heure de nuit {heure_int}h - AUTORISÉE")
         else:
-            # Heures de jour - comparaison simple
+            # Heures de jour - vérification
             if heure_int > heure_actuelle:
                 print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
                 return JsonResponse({
@@ -2397,8 +2391,7 @@ def api_creer_course(request):
                     'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future)."
                 }, status=400)
         
-        # ✅ Heure passée ou actuelle - AUTORISÉE
-        print(f"  ✅ Heure {heure_int}h - autorisée (rattrapage)")
+        print(f"  ✅ Heure {heure_int}h - autorisée")
         
         # =================================================
         
@@ -2414,7 +2407,7 @@ def api_creer_course(request):
         # ========== VÉRIFIER SI LA COURSE EXISTE DÉJÀ ==========
         course_existante = Course.objects.filter(
             chauffeur=chauffeur,
-            date_reelle=date_obj,
+            date_reelle=date_a_utiliser,
             type_transport=type_transport,
             heure=heure_int
         ).first()
@@ -2443,10 +2436,10 @@ def api_creer_course(request):
         else:
             course = Course(
                 chauffeur=chauffeur,
-                date_reelle=date_obj,
+                date_reelle=date_a_utiliser,
                 type_transport=type_transport,
                 heure=heure_int,
-                jour=date_obj.strftime('%A'),
+                jour=date_a_utiliser.strftime('%A'),
                 statut='en_attente'
             )
             course.save()
@@ -2469,22 +2462,16 @@ def api_creer_course(request):
                 
                 # Convertir la date en jour de semaine
                 jours_fr = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
-                jour_semaine = jours_fr[date_obj.weekday()]
-                print(f"📅 Jour demandé: {jour_semaine} ({date_obj})")
-                
-                # Vérifier si la date est dans le planning
-                dates_par_jour = gestionnaire.dates_par_jour
-                date_str_formatted = date_obj.strftime("%d/%m/%Y")
+                date_str_formatted = date_a_utiliser.strftime("%d/%m/%Y")
                 
                 jour_correspondant = None
-                for jour_planning, date_planning_str in dates_par_jour.items():
+                for jour_planning, date_planning_str in gestionnaire.dates_par_jour.items():
                     if date_planning_str == date_str_formatted:
                         jour_correspondant = jour_planning
                         print(f"✅ Date trouvée: {date_str_formatted} -> {jour_correspondant}")
                         break
                 
                 if jour_correspondant:
-                    # Récupérer les agents programmés pour cette heure
                     class FiltreFormPlanning:
                         def __init__(self, jour, type_transport, heure_valeur):
                             self.cleaned_data = {
@@ -2493,17 +2480,13 @@ def api_creer_course(request):
                                 'heure_ete': False,
                                 'filtre_agents': 'tous'
                             }
-                            self.data = {'heure_specifique': str(heure_valeur)}
+                            self.data = {'heure_specifique': str(heure_int)}
                     
                     form_filtre = FiltreFormPlanning(jour_correspondant, type_transport, heure_int)
                     liste_transports = gestionnaire.traiter_donnees(form_filtre)
                     
                     agents_programmes = [t['agent'].strip().lower() for t in liste_transports]
                     print(f"📋 Agents programmés ({len(agents_programmes)}): {agents_programmes[:10]}")
-                else:
-                    print(f"❌ Date {date_str_formatted} non trouvée dans le planning")
-            else:
-                print("⚠️ Planning non chargé dans la session")
         except Exception as e:
             print(f"⚠️ Erreur chargement planning: {e}")
         
@@ -2526,10 +2509,10 @@ def api_creer_course(request):
                 agent = Agent.objects.get(id=agent_id)
                 print(f"✅ Agent trouvé: {agent.nom} (ID: {agent.id})")
                 
-                # ✅ Vérifier si l'agent n'est pas déjà affecté à CETTE HEURE
+                # Vérifier si l'agent n'est pas déjà affecté à CETTE HEURE
                 existe_deja = Affectation.objects.filter(
                     agent=agent,
-                    date_reelle=date_obj,
+                    date_reelle=date_a_utiliser,
                     heure=heure_int
                 ).exists()
                 
@@ -2540,14 +2523,14 @@ def api_creer_course(request):
                         agent=agent,
                         type_transport=type_transport,
                         heure=heure_int,
-                        jour=date_obj.strftime('%A'),
-                        date_reelle=date_obj,
+                        jour=date_a_utiliser.strftime('%A'),
+                        date_reelle=date_a_utiliser,
                         prix_course=course.get_prix_course() if hasattr(course, 'get_prix_course') else 0
                     )
                     agents_affectes.append(agent)
                     print(f"  ✅ Agent {agent.nom} affecté")
                     
-                    # ========== VÉRIFICATION HORS PLANNING ==========
+                    # VÉRIFICATION HORS PLANNING
                     if planning_charge and agents_programmes:
                         nom_normalise = agent.nom.strip().lower()
                         
@@ -2555,11 +2538,11 @@ def api_creer_course(request):
                             print(f"  🚨 AGENT HORS PLANNING: {agent.nom}")
                             agents_hors_planning.append(agent)
                             
-                            # ✅ NOTIFICATION ADMIN
+                            # NOTIFICATION ADMIN
                             try:
                                 from gestion.models import NotificationAdmin
                                 
-                                notification = NotificationAdmin.objects.create(
+                                NotificationAdmin.objects.create(
                                     titre=f"🚨 Agent hors planning - {agent.nom}",
                                     message=(
                                         f"L'agent **{agent.nom}** a été transporté par "
@@ -2571,12 +2554,10 @@ def api_creer_course(request):
                                     lu=False
                                 )
                                 notifications_crees += 1
-                                print(f"  ✅ Notification admin créée (ID: {notification.id})")
-                                
                             except Exception as e:
                                 print(f"  ❌ Erreur création notification admin: {e}")
                             
-                            # ✅ NOTIFICATION POUR SUPER CHAUFFEURS
+                            # NOTIFICATION POUR SUPER CHAUFFEURS
                             try:
                                 from chauffeurs_mobile.models import MobileNotification
                                 
@@ -2607,14 +2588,8 @@ def api_creer_course(request):
                                         vue=False
                                     )
                                     super_notifications_crees += 1
-                                    print(f"  📢 Notification envoyée à super-chauffeur: {super_chauffeur.nom}")
-                                
                             except Exception as e:
                                 print(f"  ❌ Erreur création notification super: {e}")
-                                
-                        else:
-                            print(f"  ✅ Agent programmé")
-                    
                 else:
                     print(f"⚠️ Agent {agent.nom} déjà affecté à {heure_int}h")
                     
@@ -2627,7 +2602,7 @@ def api_creer_course(request):
                 agents_non_trouves.append(agent_id)
                 continue
         
-        # Mettre à jour le statut si nécessaire
+        # Mettre à jour le statut
         if course.statut == 'en_attente':
             course.save()
         
@@ -2640,30 +2615,23 @@ def api_creer_course(request):
             'course_id': course.id,
             'agents_affectes': [a.nom for a in agents_affectes],
             'created': created,
-            'date_utilisee': date_obj.isoformat(),
-            'date_originale': date_originale.isoformat() if date_originale else None,
+            'date_utilisee': date_a_utiliser.isoformat(),
+            'date_originale': date_str,
+            'nuit_mode': heure_actuelle < 4,
             'debug': {
                 'planning_charge': planning_charge,
                 'agents_programmes_count': len(agents_programmes),
                 'hors_planning_count': len(agents_hors_planning),
                 'notifications_admin': notifications_crees,
                 'notifications_super': super_notifications_crees,
-                'notifications_total': total_notifications,
                 'agents_non_trouves': agents_non_trouves
             }
         }
         
-        # Ajouter l'info sur les agents hors planning
         if agents_hors_planning:
             response_data['hors_planning'] = {
                 'count': len(agents_hors_planning),
-                'agents': [a.nom for a in agents_hors_planning],
-                'notifications': {
-                    'admin': notifications_crees,
-                    'super': super_notifications_crees,
-                    'total': total_notifications
-                },
-                'message': f"{len(agents_hors_planning)} agent(s) transporté(s) hors planning - {total_notifications} notification(s) créée(s)"
+                'agents': [a.nom for a in agents_hors_planning]
             }
         
         print("="*60)
@@ -2684,7 +2652,7 @@ def api_creer_course(request):
 @csrf_exempt
 @require_GET
 def api_agents_disponibles(request):
-    """API pour voir les agents disponibles pour aujourd'hui - CORRIGÉ POUR 00h"""
+    """API pour voir les agents disponibles - CORRIGÉ POUR GÉRER LES HEURES DE NUIT (00h-04h)"""
     chauffeur_id = request.session.get('chauffeur_id')
     
     if not chauffeur_id:
@@ -2703,35 +2671,44 @@ def api_agents_disponibles(request):
             return JsonResponse({'success': False, 'error': 'Paramètres manquants'})
         
         date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
-        aujourd_hui = timezone.now().date()
+        maintenant = timezone.now()
+        maintenant_heure = maintenant.hour
+        maintenant_date = maintenant.date()
         heure_int = int(heure)
         
-        # ✅ CORRECTION POUR 00h: Gestion spéciale
-        if heure_int == 0:
-            # Pour 00h, on permet de créer des courses pour:
-            # - Aujourd'hui (début de journée)
-            # - OU Demain (si on est après minuit)
-            if date_obj == aujourd_hui:
-                print(f"🕛 Création course pour aujourd'hui à 00h - AUTORISÉ")
-            elif date_obj == aujourd_hui + timedelta(days=1):
-                print(f"🕛 Création course pour demain à 00h - AUTORISÉ")
-                # On force la date à aujourd'hui pour la recherche
-                date_obj = aujourd_hui
-                date_str = aujourd_hui.isoformat()
+        print(f"🔍 Recherche agents pour: {date_obj} - {type_transport} - {heure_int}h")
+        print(f"🕐 Heure actuelle: {maintenant_heure}h, Date actuelle: {maintenant_date}")
+        
+        # ✅ CORRECTION: Gestion des heures de nuit (00h-04h)
+        # Entre minuit et 4h, on travaille encore pour la date d'hier
+        date_a_utiliser = date_obj
+        
+        if maintenant_heure < 4:
+            # On est dans la nuit (00h-04h)
+            # On doit pouvoir créer des courses pour la date d'hier
+            date_hier = maintenant_date - timedelta(days=1)
+            
+            if date_obj == maintenant_date:
+                # Si l'utilisateur demande aujourd'hui, on lui propose hier (car c'est la même nuit)
+                print(f"🌙 Nuit détectée (actuellement {maintenant_heure}h) - Redirection vers hier ({date_hier})")
+                date_a_utiliser = date_hier
+            elif date_obj == date_hier:
+                print(f"✅ Date demandée correspond à hier ({date_hier}) - OK")
+                date_a_utiliser = date_hier
             else:
                 return JsonResponse({
-                    'success': False, 
-                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                    'success': False,
+                    'error': f"Entre {maintenant_heure}h et 4h, vous ne pouvez créer des courses que pour {date_hier}"
                 })
         else:
-            # Pour les autres heures, vérification normale
-            if date_obj != aujourd_hui:
+            # Journée normale (après 4h)
+            if date_obj != maintenant_date:
                 return JsonResponse({
-                    'success': False, 
+                    'success': False,
                     'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
                 })
         
-        print(f"🔍 Recherche agents pour: {date_obj} - {type_transport} - {heure_int}h")
+        print(f"📅 Date utilisée pour la recherche: {date_a_utiliser}")
         
         # ========== CHARGER LE PLANNING ==========
         agents_programmes = None
@@ -2744,8 +2721,8 @@ def api_agents_disponibles(request):
             
             if gestionnaire.recharger_planning_depuis_session():
                 jours_fr = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
-                jour_semaine = jours_fr[date_obj.weekday()]
-                date_str_formatted = date_obj.strftime("%d/%m/%Y")
+                jour_semaine = jours_fr[date_a_utiliser.weekday()]
+                date_str_formatted = date_a_utiliser.strftime("%d/%m/%Y")
                 
                 jour_correspondant = None
                 for jour_planning, date_planning_str in gestionnaire.dates_par_jour.items():
@@ -2775,7 +2752,7 @@ def api_agents_disponibles(request):
         # ========== VÉRIFIER COURSE EXISTANTE ==========
         course_existante = Course.objects.filter(
             chauffeur_id=chauffeur_id,
-            date_reelle=date_obj,
+            date_reelle=date_a_utiliser,
             type_transport=type_transport,
             heure=heure_int
         ).first()
@@ -2790,8 +2767,7 @@ def api_agents_disponibles(request):
             })
         
         # ========== RÉCUPÉRER LES AGENTS ==========
-        # ✅ CORRECTION: Vérifier les agents déjà dans une course à la MÊME HEURE seulement
-        affectations_aujourdhui = Affectation.objects.filter(date_reelle=date_obj)
+        affectations_aujourdhui = Affectation.objects.filter(date_reelle=date_a_utiliser)
         
         # Créer un dictionnaire des agents occupés par heure
         agents_occupes_par_heure = {}
@@ -2810,13 +2786,13 @@ def api_agents_disponibles(request):
         agents_exclus_par_heure = agents_occupes_par_heure.get(heure_int, [])
         print(f"🕒 {heure_int}h: {len(agents_exclus_par_heure)} agent(s) exclus (ceux déjà à {heure_int}h)")
         
-        # Réservations pour aujourd'hui
-        reservations_aujourdhui = Reservation.objects.filter(
-            date_reservation=date_obj,
+        # Réservations
+        reservations_date = Reservation.objects.filter(
+            date_reservation=date_a_utiliser,
             statut__in=['reservee', 'confirmee']
         ).select_related('chauffeur', 'agent')
         
-        reservations_filtrees = [r for r in reservations_aujourdhui if r.type_transport == type_transport]
+        reservations_filtrees = [r for r in reservations_date if r.type_transport == type_transport]
         
         tous_agents = Agent.objects.filter(voiture_personnelle=False).order_by('nom')
         
@@ -2848,7 +2824,7 @@ def api_agents_disponibles(request):
                 'peut_reserver': True
             }
             
-            # ✅ Vérifier si l'agent est déjà dans une course à CETTE HEURE
+            # Vérifier si l'agent est déjà dans une course à CETTE HEURE
             if agent.id in agents_exclus_par_heure:
                 agent_data['est_exclu'] = True
                 agent_data['peut_reserver'] = False
@@ -2856,7 +2832,7 @@ def api_agents_disponibles(request):
                 agents_exclus.append(agent_data)
                 continue
             
-            # Réservé pour cette heure ?
+            # Réservé ?
             if agent.id in reservations_par_agent:
                 agent_data.update(reservations_par_agent[agent.id])
                 agent_data['est_reserve'] = True
@@ -2884,16 +2860,16 @@ def api_agents_disponibles(request):
             'mes_reserves': len([a for a in agents_reserves if a.get('est_mien', False)])
         }
         
-        print(f"✅ Résultat: {stats['disponibles']} agents disponibles, {stats['exclus']} exclus")
-        
         return JsonResponse({
             'success': True,
             'agents': agents_final,
             'stats': stats,
             'planning_info': planning_info,
-            'date': date_str,
+            'date': date_a_utiliser.isoformat(),
+            'date_originale': date_str,
             'type_transport': type_transport,
-            'heure': heure_int
+            'heure': heure_int,
+            'nuit_mode': maintenant_heure < 4
         })
         
     except Exception as e:
