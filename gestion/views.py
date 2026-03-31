@@ -564,10 +564,32 @@ def upload_files(request):
                         for chunk in fichier_planning.chunks():
                             destination.write(chunk)
                     
-                    # CORRECTION ICI : Passer le chemin du fichier
-                    # On ouvre le fichier en mode lecture binaire pour le passer à charger_planning
-                    with open(temp_path, 'rb') as f:
-                        success = gestionnaire.charger_planning(f)
+                    # CORRECTION CRITIQUE ICI : Créer un objet fichier simulé avec la méthode chunks()
+                    class FileWrapper:
+                        def __init__(self, path):
+                            self.path = path
+                            self.file = None
+                        
+                        def read(self):
+                            if not self.file:
+                                self.file = open(self.path, 'rb')
+                            return self.file.read()
+                        
+                        def seek(self, offset):
+                            if self.file:
+                                self.file.seek(offset)
+                        
+                        def chunks(self, chunk_size=8192):
+                            with open(self.path, 'rb') as f:
+                                while True:
+                                    chunk = f.read(chunk_size)
+                                    if not chunk:
+                                        break
+                                    yield chunk
+                    
+                    # Utiliser le wrapper
+                    wrapped_file = FileWrapper(temp_path)
+                    success = gestionnaire.charger_planning(wrapped_file)
                     
                     if success:
                         # Stocker les infos dans la session
@@ -594,9 +616,9 @@ def upload_files(request):
                         info_path = os.path.join(settings.BASE_DIR, 'info.xlsx')
                         if os.path.exists(info_path):
                             try:
-                                with open(info_path, 'rb') as f_info:
-                                    if gestionnaire.charger_agents(f_info):
-                                        messages.info(request, '📂 Fichier info.xlsx chargé automatiquement')
+                                info_wrapper = FileWrapper(info_path)
+                                if gestionnaire.charger_agents(info_wrapper):
+                                    messages.info(request, '📂 Fichier info.xlsx chargé automatiquement')
                             except Exception as e:
                                 print(f"⚠️ Erreur chargement info.xlsx: {e}")
                         else:
@@ -660,9 +682,31 @@ def upload_files(request):
                         for chunk in fichier_info.chunks():
                             destination.write(chunk)
                     
-                    # CORRECTION ICI : Passer le fichier ouvert en mode binaire
-                    with open(temp_path, 'rb') as f:
-                        success = gestionnaire.charger_agents(f)
+                    # Utiliser le wrapper
+                    class FileWrapper:
+                        def __init__(self, path):
+                            self.path = path
+                            self.file = None
+                        
+                        def read(self):
+                            if not self.file:
+                                self.file = open(self.path, 'rb')
+                            return self.file.read()
+                        
+                        def seek(self, offset):
+                            if self.file:
+                                self.file.seek(offset)
+                        
+                        def chunks(self, chunk_size=8192):
+                            with open(self.path, 'rb') as f:
+                                while True:
+                                    chunk = f.read(chunk_size)
+                                    if not chunk:
+                                        break
+                                    yield chunk
+                    
+                    info_wrapper = FileWrapper(temp_path)
+                    success = gestionnaire.charger_agents(info_wrapper)
                     
                     if success:
                         request.session['uploaded_info_file'] = {
