@@ -24,6 +24,7 @@ class GestionnaireTransport:
         self.df_agents = None
         self.dates_par_jour = {}
         self.temp_path = os.path.join(settings.MEDIA_ROOT, 'temp_planning.xlsx')
+        self._cache_transports = {}  # Cache pour les résultats de traiter_donnees
     
     def _lire_contenu_fichier(self, fichier):
         """
@@ -99,6 +100,9 @@ class GestionnaireTransport:
                 noms_colonnes = noms_colonnes[:len(self.df_planning.columns)]
             
             self.df_planning.columns = noms_colonnes
+            
+            # Vider le cache après rechargement
+            self._cache_transports = {}
             
             print(f"✅ Planning chargé: {len(self.df_planning)} lignes")
             print(f"📅 Dates disponibles: {self.dates_par_jour}")
@@ -283,7 +287,7 @@ class GestionnaireTransport:
         print(f"📅 Dates par défaut: {self.dates_par_jour}")
     
     def get_info_agent(self, nom_agent):
-        """Récupère les informations d'un agent depuis la base"""
+        """Récupère les informations d'un agent depuis la base avec cache"""
         try:
             agent_db = Agent.objects.filter(nom__icontains=nom_agent).first()
             if agent_db:
@@ -389,16 +393,79 @@ class GestionnaireTransport:
         
         return creneaux
     
+    def _preparer_tous_les_transports(self):
+        """Prépare tous les transports en une seule passe (optimisation)"""
+        if self.df_planning is None or self.df_planning.empty:
+            return {}
+        
+        cache_key = f"tous_transports_{hash(str(self.dates_par_jour))}"
+        
+        # Vérifier si déjà en cache
+        if cache_key in self._cache_transports:
+            return self._cache_transports[cache_key]
+        
+        print("📊 Préparation de tous les transports (une seule passe)...")
+        
+        transports_par_heure = {}
+        
+        for idx, agent in self.df_planning.iterrows():
+            if pd.isna(agent.get('Salarie')) or str(agent['Salarie']).strip() == '':
+                continue
+            
+            nom_agent = str(agent['Salarie']).strip()
+            info_agent = self.get_info_agent(nom_agent)
+            
+            if info_agent['voiture_personnelle']:
+                continue
+            
+            for jour_col, jour_nom in [('Lundi', 'Lundi'), ('Mardi', 'Mardi'), ('Mercredi', 'Mercredi'), 
+                                        ('Jeudi', 'Jeudi'), ('Vendredi', 'Vendredi'), ('Samedi', 'Samedi'), 
+                                        ('Dimanche', 'Dimanche')]:
+                if jour_col not in agent.index:
+                    continue
+                
+                planning = agent[jour_col]
+                creneaux = self.extraire_heures(planning)
+                
+                for heure_debut, heure_fin in creneaux:
+                    # Ramassage
+                    if heure_debut <= 23:
+                        key = (jour_nom, heure_debut, 'ramassage')
+                        if key not in transports_par_heure:
+                            transports_par_heure[key] = []
+                        transports_par_heure[key].append({
+                            'agent': nom_agent,
+                            'agent_id': info_agent['agent_obj'].id if info_agent['agent_obj'] else None,
+                            'adresse': info_agent['adresse'],
+                            'telephone': info_agent['telephone'],
+                            'societe': info_agent['societe'],
+                            'est_complet': info_agent['est_complet']
+                        })
+                    
+                    # Départ
+                    heure_fin_norm = heure_fin % 24
+                    if heure_fin_norm <= 23:
+                        key = (jour_nom, heure_fin_norm, 'depart')
+                        if key not in transports_par_heure:
+                            transports_par_heure[key] = []
+                        transports_par_heure[key].append({
+                            'agent': nom_agent,
+                            'agent_id': info_agent['agent_obj'].id if info_agent['agent_obj'] else None,
+                            'adresse': info_agent['adresse'],
+                            'telephone': info_agent['telephone'],
+                            'societe': info_agent['societe'],
+                            'est_complet': info_agent['est_complet']
+                        })
+        
+        self._cache_transports[cache_key] = transports_par_heure
+        print(f"✅ Préparation terminée: {len(transports_par_heure)} créneaux différents")
+        return transports_par_heure
+    
     def traiter_donnees(self, filtre_form):
         """Traite les données du planning avec les filtres - VERSION OPTIMISÉE"""
         if self.df_planning is None or self.df_planning.empty:
             print("❌ df_planning est None ou vide")
             return []
-        
-        print(f"📊 TRAITEMENT DONNEES - Début")
-        
-        liste_transports = []
-        deja_traites = set()
         
         jour_selectionne = filtre_form.cleaned_data.get('jour', 'Tous')
         type_transport_selectionne = filtre_form.cleaned_data.get('type_transport', 'tous')
@@ -414,90 +481,57 @@ class GestionnaireTransport:
         if type_transport_selectionne in ['tous', 'depart']:
             heures_depart = [h for h, _ in self.get_heures_config('depart')]
         
-        jours_mapping = {
-            'Lundi': 'Lundi', 'Mardi': 'Mardi', 'Mercredi': 'Mercredi', 
-            'Jeudi': 'Jeudi', 'Vendredi': 'Vendredi', 'Samedi': 'Samedi', 'Dimanche': 'Dimanche'
-        }
+        # Récupérer tous les transports pré-calculés
+        tous_transports = self._preparer_tous_les_transports()
         
-        # Limiter le nombre d'agents traités
-        max_agents = min(200, len(self.df_planning))
+        liste_transports = []
         
-        for idx, agent in self.df_planning.head(max_agents).iterrows():
-            if pd.isna(agent.get('Salarie')) or str(agent['Salarie']).strip() == '':
+        for (jour, heure, type_transport), agents in tous_transports.items():
+            # Filtrer par jour
+            if jour_selectionne != 'Tous' and jour != jour_selectionne:
                 continue
             
-            nom_agent = str(agent['Salarie']).strip()
-            info_agent = self.get_info_agent(nom_agent)
-            
-            if filtre_agents == 'complets' and not info_agent['est_complet']:
-                continue
-            elif filtre_agents == 'incomplets' and info_agent['est_complet']:
+            # Filtrer par type de transport
+            if type_transport_selectionne != 'tous' and type_transport != type_transport_selectionne:
                 continue
             
-            if info_agent['voiture_personnelle']:
+            # Filtrer par heure
+            heure_a_verifier = heure
+            if type_transport == 'ramassage' and heure not in heures_ramassage:
+                continue
+            if type_transport == 'depart' and heure not in heures_depart:
                 continue
             
-            jours_a_verifier = []
-            if jour_selectionne == 'Tous':
-                for jour_col, jour_nom in jours_mapping.items():
-                    if jour_col in agent.index:
-                        jours_a_verifier.append((jour_col, jour_nom))
+            # Ajustement heure d'été
+            if heure_ete_active:
+                heure_affichee = heure - 1
+                if heure_affichee < 0:
+                    heure_affichee += 24
             else:
-                if jour_selectionne in agent.index:
-                    jours_a_verifier.append((jour_selectionne, jour_selectionne))
+                heure_affichee = heure
             
-            for jour_col, jour_nom in jours_a_verifier:
-                planning = agent[jour_col]
-                creneaux = self.extraire_heures(planning)
+            # Ajouter les transports
+            for agent_data in agents:
+                if filtre_agents == 'complets' and not agent_data['est_complet']:
+                    continue
+                elif filtre_agents == 'incomplets' and agent_data['est_complet']:
+                    continue
                 
-                for heure_debut, heure_fin in creneaux:
-                    if heure_ete_active:
-                        heure_debut_ajustee = heure_debut - 1
-                        heure_fin_ajustee = heure_fin - 1
-                    else:
-                        heure_debut_ajustee = heure_debut
-                        heure_fin_ajustee = heure_fin
-                    
-                    # Ramassage
-                    heure_debut_comparaison = heure_debut_ajustee % 24
-                    if type_transport_selectionne in ['tous', 'ramassage'] and heure_debut_comparaison in heures_ramassage:
-                        key = (nom_agent, jour_nom, heure_debut_ajustee, 'ramassage')
-                        if key not in deja_traites:
-                            deja_traites.add(key)
-                            liste_transports.append({
-                                'agent': nom_agent,
-                                'jour': jour_nom,
-                                'heure': heure_debut_ajustee,
-                                'heure_affichage': f"{heure_debut_ajustee % 24}h",
-                                'adresse': info_agent['adresse'],
-                                'telephone': info_agent['telephone'],
-                                'societe': info_agent['societe'],
-                                'date_reelle': self.dates_par_jour.get(jour_nom, 'Date non definie'),
-                                'type_transport': 'ramassage',
-                                'est_complet': info_agent['est_complet'],
-                                'agent_id': info_agent['agent_obj'].id if info_agent['agent_obj'] else None
-                            })
-                    
-                    # Départ
-                    heure_fin_comparaison = heure_fin_ajustee % 24
-                    if type_transport_selectionne in ['tous', 'depart'] and heure_fin_comparaison in heures_depart:
-                        key = (nom_agent, jour_nom, heure_fin_ajustee, 'depart')
-                        if key not in deja_traites:
-                            deja_traites.add(key)
-                            liste_transports.append({
-                                'agent': nom_agent,
-                                'jour': jour_nom,
-                                'heure': heure_fin_ajustee,
-                                'heure_affichage': f"{heure_fin_ajustee % 24}h",
-                                'adresse': info_agent['adresse'],
-                                'telephone': info_agent['telephone'],
-                                'societe': info_agent['societe'],
-                                'date_reelle': self.dates_par_jour.get(jour_nom, 'Date non definie'),
-                                'type_transport': 'depart',
-                                'est_complet': info_agent['est_complet'],
-                                'agent_id': info_agent['agent_obj'].id if info_agent['agent_obj'] else None
-                            })
+                liste_transports.append({
+                    'agent': agent_data['agent'],
+                    'jour': jour,
+                    'heure': heure,
+                    'heure_affichage': f"{heure_affichee}h",
+                    'adresse': agent_data['adresse'],
+                    'telephone': agent_data['telephone'],
+                    'societe': agent_data['societe'],
+                    'date_reelle': self.dates_par_jour.get(jour, 'Date non definie'),
+                    'type_transport': type_transport,
+                    'est_complet': agent_data['est_complet'],
+                    'agent_id': agent_data['agent_id']
+                })
         
+        # Trier
         ordre_jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         liste_transports.sort(key=lambda x: (ordre_jours.index(x['jour']), x['type_transport'], x['heure']))
         
