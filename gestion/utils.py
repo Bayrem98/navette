@@ -2,6 +2,7 @@ import pandas as pd
 import re
 from datetime import datetime, timedelta
 import os
+from io import BytesIO
 from django.conf import settings
 from django.core.cache import cache
 from .models import HeureTransport, Affectation, Agent, Course, Societe
@@ -17,195 +18,277 @@ class GestionnaireTransport:
             ).order_by('ordre')
             cache.set(cache_key, heures, 3600)  # Cache 1 heure
         return [(heure_obj.heure, heure_obj.libelle) for heure_obj in heures]
+    
     def __init__(self):
         self.df_planning = None
         self.df_agents = None
         self.dates_par_jour = {}
-        self.temp_path = os.path.join(settings.BASE_DIR, 'temp_planning.xlsx')
-    def charger_planning(self, fichier):
+        self.temp_path = os.path.join(settings.MEDIA_ROOT, 'temp_planning.xlsx')
+    
+    def _lire_contenu_fichier(self, fichier):
+        """
+        Lit le contenu d'un fichier quel que soit son type:
+        - UploadedFile (Django)
+        - BufferedReader (open())
+        - Chemin de fichier (str)
+        - BytesIO
+        Retourne le contenu binaire
+        """
         try:
-            with open(self.temp_path, 'wb+') as destination:
-                for chunk in fichier.chunks():
-                    destination.write(chunk)
+            # Cas 1: C'est un objet avec la méthode read()
+            if hasattr(fichier, 'read'):
+                # Lire le contenu
+                content = fichier.read()
+                # Réinitialiser le pointeur si possible
+                if hasattr(fichier, 'seek'):
+                    fichier.seek(0)
+                return content
             
-            self.extraire_dates_reelles(self.temp_path)
+            # Cas 2: C'est un chemin de fichier (string)
+            elif isinstance(fichier, str) and os.path.exists(fichier):
+                with open(fichier, 'rb') as f:
+                    return f.read()
             
-            self.df_planning = pd.read_excel(self.temp_path, skiprows=2, header=None)
+            # Cas 3: C'est déjà des bytes
+            elif isinstance(fichier, bytes):
+                return fichier
+            
+            # Cas 4: C'est BytesIO
+            elif hasattr(fichier, 'getvalue'):
+                return fichier.getvalue()
+            
+            else:
+                raise ValueError(f"Type de fichier non supporté: {type(fichier)}")
+                
+        except Exception as e:
+            print(f"❌ Erreur lecture fichier: {e}")
+            raise
+    
+    def charger_planning(self, fichier):
+        """
+        Charge le fichier Excel de planning
+        Accepte: UploadedFile, chemin (str), BufferedReader, BytesIO
+        """
+        try:
+            print("📂 Chargement du planning...")
+            
+            # Lire le contenu du fichier
+            content = self._lire_contenu_fichier(fichier)
+            
+            # Sauvegarder localement si c'est un chemin ou un fichier uploadé
+            if isinstance(fichier, str) and os.path.exists(fichier):
+                # C'est déjà un chemin, on le garde
+                pass
+            else:
+                # Sauvegarder pour usage futur
+                os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+                with open(self.temp_path, 'wb') as f:
+                    f.write(content)
+            
+            # Extraire les dates réelles
+            self.extraire_dates_reelles(content)
+            
+            # Lire le fichier avec pandas
+            df = pd.read_excel(BytesIO(content), engine='openpyxl')
+            
+            # Trouver la ligne de début des données
+            ligne_debut = 0
+            for idx in range(min(5, len(df))):
+                row = df.iloc[idx]
+                # Chercher la ligne avec "Salarié" ou des noms d'agents
+                if any('Salarié' in str(cell) for cell in row if pd.notna(cell)):
+                    ligne_debut = idx
+                    break
+                # Si on trouve un nom d'agent plausible
+                if any(isinstance(cell, str) and len(cell) > 3 and ' ' in cell for cell in row if pd.notna(cell)):
+                    ligne_debut = idx
+                    break
+            
+            # Lire à partir de la ligne trouvée
+            if ligne_debut > 0:
+                self.df_planning = pd.read_excel(BytesIO(content), skiprows=ligne_debut, engine='openpyxl')
+            else:
+                self.df_planning = df
+            
+            # Nettoyer le dataframe
             self.df_planning = self.df_planning.dropna(how='all').reset_index(drop=True)
             
+            # Renommer les colonnes
             noms_colonnes = ['Salarie', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche', 'Qualification']
-            
             if len(self.df_planning.columns) > len(noms_colonnes):
                 self.df_planning = self.df_planning.iloc[:, :len(noms_colonnes)]
+            elif len(self.df_planning.columns) < len(noms_colonnes):
+                noms_colonnes = noms_colonnes[:len(self.df_planning.columns)]
             
-            self.df_planning.columns = noms_colonnes[:len(self.df_planning.columns)]
-                
+            self.df_planning.columns = noms_colonnes
+            
+            print(f"✅ Planning chargé: {len(self.df_planning)} lignes")
             return True
                 
         except Exception as e:
-            print(f"Erreur chargement planning: {e}")
+            print(f"❌ Erreur chargement planning: {e}")
+            import traceback
+            traceback.print_exc()
             return False
-
-    def charger_agents_excel(self, fichier):
-        "Charge les agents depuis un fichier Excel uploadé"
+    
+    def charger_agents(self, fichier):
+        """
+        Charge le fichier Excel des agents (info.xlsx)
+        Accepte: UploadedFile, chemin (str), BufferedReader, BytesIO
+        """
         try:
-            with open(os.path.join(settings.BASE_DIR, 'temp_agents.xlsx'), 'wb+') as destination:
-                for chunk in fichier.chunks():
-                    destination.write(chunk)
+            print("📂 Chargement des agents...")
             
-            self.df_agents = pd.read_excel(os.path.join(settings.BASE_DIR, 'temp_agents.xlsx'))
+            # Lire le contenu du fichier
+            content = self._lire_contenu_fichier(fichier)
+            
+            # Sauvegarder localement si nécessaire
+            agents_path = os.path.join(settings.MEDIA_ROOT, 'temp_agents.xlsx')
+            os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+            with open(agents_path, 'wb') as f:
+                f.write(content)
+            
+            # Lire avec pandas
+            df = pd.read_excel(BytesIO(content), engine='openpyxl')
+            self.df_agents = df
+            
+            print(f"✅ Agents chargés: {len(df)} lignes")
+            
+            # Mettre à jour ou créer les agents dans la base
+            for index, row in df.iterrows():
+                nom = row.get('voyant', '')
+                if nom and pd.notna(nom):
+                    nom_str = str(nom).strip()
+                    if not nom_str:
+                        continue
+                    
+                    try:
+                        agent, created = Agent.objects.get_or_create(
+                            nom=nom_str,
+                            defaults={
+                                'adresse': str(row.get('adresse', 'Adresse à compléter')),
+                                'telephone': str(row.get('Mobile', '00000000')),
+                                'voiture_personnelle': str(row.get('voiture', '')).lower() in ['oui', 'yes', 'true', '1']
+                            }
+                        )
+                        
+                        # Mettre à jour la société si présente
+                        societe_nom = row.get('societe', '')
+                        if societe_nom and pd.notna(societe_nom):
+                            societe_nom_str = str(societe_nom).strip()
+                            if societe_nom_str:
+                                societe_obj, _ = Societe.objects.get_or_create(
+                                    nom=societe_nom_str,
+                                    defaults={'adresse': '', 'telephone': ''}
+                                )
+                                agent.societe = societe_obj
+                                agent.societe_texte = None
+                                agent.save()
+                                
+                    except Exception as e:
+                        print(f"⚠️ Erreur import agent {nom}: {e}")
+            
             return True
+            
         except Exception as e:
-            print(f"Erreur chargement agents: {e}")
+            print(f"❌ Erreur chargement agents: {e}")
+            import traceback
+            traceback.print_exc()
             return False
-
+    
     def recharger_planning_depuis_session(self):
+        """Recharge le planning depuis le fichier temporaire"""
         try:
             if os.path.exists(self.temp_path):
-                self.extraire_dates_reelles(self.temp_path)
-                
-                self.df_planning = pd.read_excel(self.temp_path, skiprows=2, header=None)
-                self.df_planning = self.df_planning.dropna(how='all').reset_index(drop=True)
-                
-                noms_colonnes = ['Salarie', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche', 'Qualification']
-                if len(self.df_planning.columns) > len(noms_colonnes):
-                    self.df_planning = self.df_planning.iloc[:, :len(noms_colonnes)]
-                
-                self.df_planning.columns = noms_colonnes[:len(self.df_planning.columns)]
-                self.extraire_dates_reelles(self.temp_path)
-                print(f"📅 Dates extraites après rechargement: {self.dates_par_jour}")
-                return True
+                return self.charger_planning(self.temp_path)
             else:
+                print("⚠️ Fichier planning temporaire non trouvé")
                 return False
         except Exception as e:
-            print(f"Erreur rechargement planning: {e}")
+            print(f"❌ Erreur rechargement planning: {e}")
             return False
-
-    def extraire_dates_reelles(self, fichier_path):
-      
+    
+    def extraire_dates_reelles(self, fichier):
+        """
+        Extrait les dates réelles du fichier Excel
+        Accepte: UploadedFile, chemin (str), BufferedReader, BytesIO, ou contenu bytes
+        """
         try:
-            print("📅 Tentative d'extraction des dates depuis le fichier Excel...")
+            print("📅 Tentative d'extraction des dates...")
             
-            # Méthode 1: Lire le fichier avec pandas
-            df_raw = pd.read_excel(fichier_path, header=None)
+            # Lire le contenu
+            if isinstance(fichier, bytes):
+                content = fichier
+            else:
+                content = self._lire_contenu_fichier(fichier)
+            
+            # Lire avec pandas
+            df_raw = pd.read_excel(BytesIO(content), header=None, engine='openpyxl')
             
             # Chercher la ligne contenant les dates
             date_row_index = None
-            for idx in range(min(3, len(df_raw))):  # Regarder les 3 premières lignes
+            for idx in range(min(5, len(df_raw))):
                 row = df_raw.iloc[idx]
-                # Vérifier si cette ligne contient des dates
                 date_count = 0
                 for cell in row:
                     if pd.notna(cell):
                         cell_str = str(cell)
                         # Rechercher des motifs de date
-                        if re.search(r'\d{1,2}[\/\-]\d{1,2}', cell_str):
+                        if re.search(r'\d{1,2}[\/\-]\d{1,2}', cell_str) or isinstance(cell, (datetime, pd.Timestamp)):
                             date_count += 1
                 
                 if date_count >= 3:  # Si au moins 3 cellules semblent être des dates
                     date_row_index = idx
                     break
             
+            # Mapping des colonnes vers les jours
+            colonne_vers_jour = {
+                1: 'Lundi', 2: 'Mardi', 3: 'Mercredi', 4: 'Jeudi',
+                5: 'Vendredi', 6: 'Samedi', 7: 'Dimanche'
+            }
+            
             if date_row_index is not None:
                 date_row = df_raw.iloc[date_row_index]
                 print(f"📊 Ligne de dates trouvée à l'index {date_row_index}")
                 
-                # Mapping des colonnes vers les jours
-                colonne_vers_jour = {
-                    1: 'Lundi', 2: 'Mardi', 3: 'Mercredi', 4: 'Jeudi',
-                    5: 'Vendredi', 6: 'Samedi', 7: 'Dimanche'
-                }
-                
                 for col_idx, jour_nom in colonne_vers_jour.items():
                     if col_idx < len(date_row):
                         cell_value = date_row[col_idx]
-                        
                         if pd.notna(cell_value):
-                            cell_str = str(cell_value).strip()
-                            print(f"  {jour_nom}: '{cell_str}'")
-                            
-                            # Essayer de convertir en date
                             try:
-                                # Si c'est déjà un objet datetime
                                 if isinstance(cell_value, (datetime, pd.Timestamp)):
                                     date_obj = cell_value
+                                    self.dates_par_jour[jour_nom] = date_obj.strftime("%d/%m/%Y")
+                                    print(f"  ✅ {jour_nom}: {self.dates_par_jour[jour_nom]}")
                                 else:
-                                    # Essayer de parser la chaîne
-                                    date_formats = [
-                                        '%d/%m/%Y', '%d-%m-%Y', '%d/%m/%y', '%d-%m-%y',
-                                        '%d/%m', '%d-%m', '%d %B %Y', '%d %b %Y'
-                                    ]
-                                    
-                                    date_obj = None
-                                    for fmt in date_formats:
+                                    cell_str = str(cell_value).strip()
+                                    # Essayer de parser
+                                    for fmt in ['%d/%m/%Y', '%d-%m-%Y', '%d/%m/%y', '%d-%m-%y']:
                                         try:
                                             date_obj = datetime.strptime(cell_str, fmt)
-                                            # Si l'année n'est pas spécifiée, ajouter l'année courante
-                                            if date_obj.year == 1900:
-                                                date_obj = date_obj.replace(year=datetime.now().year)
-                                            break
-                                        except ValueError:
-                                            continue
-                                
-                                if date_obj:
-                                    self.dates_par_jour[jour_nom] = date_obj.strftime("%d/%m/%Y")
-                                    print(f"    ✅ Converti en: {self.dates_par_jour[jour_nom]}")
-                                else:
-                                    # Recherche de motif dans la chaîne
-                                    match = re.search(r'(\d{1,2})[\/\-](\d{1,2})', cell_str)
-                                    if match:
-                                        jour = int(match.group(1))
-                                        mois = int(match.group(2))
-                                        annee = datetime.now().year
-                                        try:
-                                            date_obj = datetime(annee, mois, jour)
                                             self.dates_par_jour[jour_nom] = date_obj.strftime("%d/%m/%Y")
-                                            print(f"    ✅ Extrait: {self.dates_par_jour[jour_nom]}")
+                                            print(f"  ✅ {jour_nom}: {self.dates_par_jour[jour_nom]}")
+                                            break
                                         except:
-                                            pass
+                                            continue
                             except Exception as e:
-                                print(f"    ❌ Erreur conversion: {e}")
+                                print(f"  ⚠️ {jour_nom}: conversion impossible - {e}")
             
-            # Si aucune date n'a été extraite, générer des dates par défaut
+            # Si aucune date extraite, générer par défaut
             if not self.dates_par_jour:
                 print("⚠️ Aucune date extraite, génération automatique...")
                 self.generer_dates_par_defaut()
             
-            print("📅 Résultat de l'extraction des dates:", self.dates_par_jour)
+            print(f"📅 Dates extraites: {self.dates_par_jour}")
+            return self.dates_par_jour
                 
         except Exception as e:
-            print(f"❌ Erreur lors de l'extraction des dates: {e}")
-            import traceback
-            traceback.print_exc()
-            print("📅 Génération des dates par défaut...")
+            print(f"❌ Erreur extraction dates: {e}")
             self.generer_dates_par_defaut()
-
-    def charger_agents(self, fichier_path):
-        try:
-            self.df_agents = pd.read_excel(fichier_path)
-            return True
-        except Exception as e:
-            print(f"Erreur chargement agents: {e}")
-            return False
-    
-    def calculer_date_par_defaut(self, jour_nom):
-        aujourd_hui = datetime.now()
-        jours_semaine = {'Lundi': 0, 'Mardi': 1, 'Mercredi': 2, 'Jeudi': 3, 'Vendredi': 4, 'Samedi': 5, 'Dimanche': 6}
-        
-        if jour_nom in jours_semaine:
-            jour_cible = jours_semaine[jour_nom]
-            jour_actuel = aujourd_hui.weekday()
-            
-            decalage = (jour_cible - jour_actuel) % 7
-            if decalage == 0:
-                decalage = 7
-            
-            date_calculee = aujourd_hui + timedelta(days=decalage)
-            return date_calculee.strftime("%d/%m/%Y")
-        
-        return aujourd_hui.strftime("%d/%m/%Y")
+            return self.dates_par_jour
     
     def generer_dates_par_defaut(self):
+        """Génère des dates par défaut (lundi de la semaine courante)"""
         aujourd_hui = datetime.now()
         jours_ordre = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         
@@ -216,10 +299,12 @@ class GestionnaireTransport:
         for i, jour in enumerate(jours_ordre):
             date_jour = date_debut + timedelta(days=i)
             self.dates_par_jour[jour] = date_jour.strftime("%d/%m/%Y")
+        
+        print(f"📅 Dates par défaut: {self.dates_par_jour}")
     
     def get_info_agent(self, nom_agent):
+        """Récupère les informations d'un agent depuis la base"""
         try:
-            # Chercher l'agent dans la base de données
             agent_db = Agent.objects.filter(nom__icontains=nom_agent).first()
             if agent_db:
                 return {
@@ -228,10 +313,9 @@ class GestionnaireTransport:
                     "societe": agent_db.get_societe_display(),
                     "voiture_personnelle": agent_db.voiture_personnelle,
                     "est_complet": agent_db.est_complet(),
-                    "agent_obj": agent_db  # Ajouter l'objet agent pour récupérer l'ID
+                    "agent_obj": agent_db
                 }
             else:
-                # Si l'agent n'existe pas, le créer avec des valeurs par défaut
                 agent = Agent.objects.create(
                     nom=nom_agent,
                     adresse="Adresse à compléter",
@@ -247,9 +331,8 @@ class GestionnaireTransport:
                     "est_complet": agent.est_complet(),
                     "agent_obj": agent
                 }
-                
         except Exception as e:
-            print(f"Erreur recherche/création agent {nom_agent}: {e}")
+            print(f"Erreur recherche agent {nom_agent}: {e}")
             return {
                 "adresse": "Adresse non renseignee",
                 "telephone": "Telephone non renseigne", 
@@ -258,39 +341,25 @@ class GestionnaireTransport:
                 "est_complet": False,
                 "agent_obj": None
             }
-
+    
     def extraire_heures(self, planning_str):
+        """Extrait les créneaux horaires d'une chaîne de planning"""
         if pd.isna(planning_str) or str(planning_str).strip() in ['', 'REPOS', 'ABSENCE', 'OFF', 'MALADIE', 'CONGÉ PAYÉ', 'CONGÉ MATERNITÉ']:
             return []
         
         texte = str(planning_str).strip().upper()
-        print(f"🔍 Extraction heures depuis: '{texte}'")
         
-        # ÉTAPE 1: Remplacer les indicateurs par des espaces
-        texte_propre = re.sub(r'CH\s*', ' ', texte)
-        texte_propre = re.sub(r'P\s*', ' ', texte_propre)
-        texte_propre = re.sub(r'R\s*', ' ', texte_propre)
-        texte_propre = re.sub(r'F\s*', ' ', texte_propre)
-        texte_propre = re.sub(r'V\s*', ' ', texte_propre)
-        
-        # ÉTAPE 2: Garder seulement chiffres, H, tirets, espaces
-        texte_propre = re.sub(r'[^0-9H\s\-:]', ' ', texte_propre)
+        # Nettoyer le texte
+        texte_propre = re.sub(r'[^0-9H\s\-:]', ' ', texte)
         texte_propre = re.sub(r'\s+', ' ', texte_propre).strip()
         
-        print(f"🧹 Après nettoyage: '{texte_propre}'")
-        
-        # PATTERNS pour trouver les plages horaires
+        # Patterns pour trouver les plages horaires
         patterns = [
-            # Format "Xh-Yh" (ex: 7h-13h)
             r'(\d{1,2})H?\s*[-]\s*(\d{1,2})H?',
-            # Format "X-Y" (ex: 7-13)
             r'(\d{1,2})\s*[-]\s*(\d{1,2})',
         ]
         
-        # Chercher TOUS les créneaux
         creneaux = []
-        
-        # Méthode 1: Utiliser findall pour trouver tous les matches
         for pattern in patterns:
             matches = re.findall(pattern, texte_propre)
             for match in matches:
@@ -298,53 +367,19 @@ class GestionnaireTransport:
                     heure_debut = int(match[0])
                     heure_fin = int(match[1])
                     
-                    # Gestion des heures de nuit
                     if heure_fin < heure_debut and heure_fin < 12:
                         heure_fin += 24
                     
                     creneaux.append((heure_debut, heure_fin))
-                    print(f"  ✅ Créneau trouvé: {heure_debut}h-{heure_fin}h")
         
-        # Méthode 2: Si aucun créneau trouvé, chercher les paires de nombres
-        if not creneaux:
-            heures_trouvees = re.findall(r'\b\d{1,2}\b', texte_propre)
-            if len(heures_trouvees) >= 2:
-                # Prendre les nombres par paires
-                for i in range(0, len(heures_trouvees) - 1, 2):
-                    heure_debut = int(heures_trouvees[i])
-                    heure_fin = int(heures_trouvees[i + 1])
-                    
-                    if heure_fin < heure_debut and heure_fin < 12:
-                        heure_fin += 24
-                    
-                    creneaux.append((heure_debut, heure_fin))
-                    print(f"  ✅ Créneau par paires: {heure_debut}h-{heure_fin}h")
-        
-        print(f"📊 Total créneaux trouvés: {len(creneaux)}")
         return creneaux
-    def get_heures_config(self, type_transport):
-        "Retourne les heures configurées pour un type de transport donné"
-        try:
-            heures = HeureTransport.objects.filter(
-                type_transport=type_transport, 
-                active=True
-            ).order_by('ordre')
-            return [(heure_obj.heure, heure_obj.libelle) for heure_obj in heures]
-        except:
-            # Valeurs par défaut
-            if type_transport == 'ramassage':
-                return [(6, 'Ramassage 6h'), (7, 'Ramassage 7h'), (8, 'Ramassage 8h'), (22, 'Ramassage 22h')]
-            else:
-                return [(22, 'Départ 22h'), (23, 'Départ 23h'), (0, 'Départ 0h'), (1, 'Départ 1h'), (2, 'Départ 2h'), (3, 'Départ 3h')]
-
+    
     def traiter_donnees(self, filtre_form):
+        """Traite les données du planning avec les filtres"""
         if self.df_planning is None or self.df_planning.empty:
             print("❌ df_planning est None ou vide")
             return []
-        print(f"📊 TRAITEMENT DONNEES - Début")
-        print(f"   Jour sélectionné: {filtre_form.cleaned_data.get('jour', 'Tous')}")
-        print(f"   Type transport: {filtre_form.cleaned_data.get('type_transport', 'tous')}")
-
+        
         liste_transports = []
         
         jour_selectionne = filtre_form.cleaned_data.get('jour', 'Tous')
@@ -352,66 +387,14 @@ class GestionnaireTransport:
         heure_ete_active = filtre_form.cleaned_data.get('heure_ete', False)
         filtre_agents = filtre_form.cleaned_data.get('filtre_agents', 'tous')
         
-        # Récupérer les paramètres GET pour les heures spécifiques
-        request_data = filtre_form.data if hasattr(filtre_form, 'data') else {}
-        
-        # Détecter les heures spécifiques cochées
-        heures_ramassage_selectionnees = []
-        heures_depart_selectionnees = []
-        
-        for key, value in request_data.items():
-            if key.startswith('ramassage_') and value == 'true':
-                try:
-                    heure = int(key.replace('ramassage_', '').replace('h', ''))
-                    heures_ramassage_selectionnees.append(heure)
-                except:
-                    pass
-            elif key.startswith('depart_') and value == 'true':
-                try:
-                    heure = int(key.replace('depart_', '').replace('h', ''))
-                    heures_depart_selectionnees.append(heure)
-                except:
-                    pass
-        
         # Récupérer les heures configurées
+        heures_ramassage = []
+        heures_depart = []
+        
         if type_transport_selectionne in ['tous', 'ramassage']:
-            heures_ramassage_config = self.get_heures_config('ramassage')
-            heures_ramassage = [heure for heure, libelle in heures_ramassage_config]
-            print(f"⏰ Heures ramassage config: {heures_ramassage}")
-        else:
-            heures_ramassage = []
-        
+            heures_ramassage = [h for h, _ in self.get_heures_config('ramassage')]
         if type_transport_selectionne in ['tous', 'depart']:
-            heures_depart_config = self.get_heures_config('depart')
-            heures_depart = [heure for heure, libelle in heures_depart_config]
-            print(f"⏰ Heures départ config: {heures_depart}")
-        else:
-            heures_depart = []
-        
-        # Filtrer par heures spécifiques si sélectionnées
-        if heures_ramassage_selectionnees and type_transport_selectionne in ['tous', 'ramassage']:
-            heures_ramassage = [h for h in heures_ramassage if h in heures_ramassage_selectionnees]
-            print(f"🎯 Heures ramassage filtrées: {heures_ramassage}")
-        if heures_depart_selectionnees and type_transport_selectionne in ['tous', 'depart']:
-            heures_depart = [h for h in heures_depart if h in heures_depart_selectionnees]
-            print(f"🎯 Heures départ filtrées: {heures_depart}")
-        # Si heure_specifique est fournie, utiliser uniquement cette heure
-        if 'heure_specifique' in request_data and request_data['heure_specifique']:
-            try:
-                heure_specifique = int(request_data['heure_specifique'])
-                if type_transport_selectionne == 'ramassage':
-                    heures_ramassage = [heure_specifique] if heure_specifique in heures_ramassage else []
-                elif type_transport_selectionne == 'depart':
-                    heures_depart = [heure_specifique] if heure_specifique in heures_depart else []
-                else:  # 'tous'
-                    if heure_specifique in heures_ramassage:
-                        heures_ramassage = [heure_specifique]
-                        heures_depart = []
-                    elif heure_specifique in heures_depart:
-                        heures_depart = [heure_specifique]
-                        heures_ramassage = []
-            except:
-                pass
+            heures_depart = [h for h, _ in self.get_heures_config('depart')]
         
         jours_mapping = {
             'Lundi': 'Lundi', 'Mardi': 'Mardi', 'Mercredi': 'Mercredi', 
@@ -419,12 +402,10 @@ class GestionnaireTransport:
         }
         
         for index, agent in self.df_planning.iterrows():
-            if pd.isna(agent['Salarie']) or str(agent['Salarie']).strip() == '':
+            if pd.isna(agent.get('Salarie')) or str(agent['Salarie']).strip() == '':
                 continue
             
             nom_agent = str(agent['Salarie']).strip()
-            print(f"  Agent: {nom_agent}")
-
             info_agent = self.get_info_agent(nom_agent)
             
             # Appliquer le filtre agents complet/incomplet
@@ -433,7 +414,7 @@ class GestionnaireTransport:
             elif filtre_agents == 'incomplets' and info_agent['est_complet']:
                 continue
             
-            # EXCLUSION AUTOMATIQUE - Si l'agent a une voiture personnelle, on le saute complètement
+            # Exclure les agents avec voiture personnelle
             if info_agent['voiture_personnelle']:
                 continue
             
@@ -448,12 +429,9 @@ class GestionnaireTransport:
             
             for jour_col, jour_nom in jours_a_verifier:
                 planning = agent[jour_col]
-                
-                # Récupérer TOUS les créneaux
                 creneaux = self.extraire_heures(planning)
                 
                 for heure_debut, heure_fin in creneaux:
-                    # Appliquer le décalage heure d'été
                     if heure_ete_active:
                         heure_debut_ajustee = heure_debut - 1
                         heure_fin_ajustee = heure_fin - 1
@@ -461,9 +439,9 @@ class GestionnaireTransport:
                         heure_debut_ajustee = heure_debut
                         heure_fin_ajustee = heure_fin
                     
-                    # Ramassage - heure de début
+                    # Ramassage
                     if type_transport_selectionne in ['tous', 'ramassage'] and heure_debut_ajustee in heures_ramassage:
-                        agent_data = {
+                        liste_transports.append({
                             'agent': nom_agent,
                             'jour': jour_nom,
                             'heure': heure_debut_ajustee,
@@ -475,20 +453,13 @@ class GestionnaireTransport:
                             'type_transport': 'ramassage',
                             'est_complet': info_agent['est_complet'],
                             'agent_id': info_agent['agent_obj'].id if info_agent['agent_obj'] else None
-                        }
-                        liste_transports.append(agent_data)
+                        })
                     
-                    # Départ - heure de fin
-                    heure_fin_comparaison = heure_fin_ajustee
-                    if heure_fin_comparaison >= 24:
-                        heure_fin_comparaison = heure_fin_comparaison - 24
-                    
+                    # Départ
+                    heure_fin_comparaison = heure_fin_ajustee % 24
                     if type_transport_selectionne in ['tous', 'depart'] and heure_fin_comparaison in heures_depart:
-                        heure_fin_affichee = heure_fin_ajustee
-                        if heure_fin_ajustee >= 24:
-                            heure_fin_affichee = heure_fin_ajustee - 24
-                        
-                        agent_data = {
+                        heure_fin_affichee = heure_fin_ajustee % 24
+                        liste_transports.append({
                             'agent': nom_agent,
                             'jour': jour_nom,
                             'heure': heure_fin_ajustee,
@@ -500,9 +471,9 @@ class GestionnaireTransport:
                             'type_transport': 'depart',
                             'est_complet': info_agent['est_complet'],
                             'agent_id': info_agent['agent_obj'].id if info_agent['agent_obj'] else None
-                        }
-                        liste_transports.append(agent_data)
+                        })
         
+        # Trier par jour, type, heure
         ordre_jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         liste_transports.sort(key=lambda x: (ordre_jours.index(x['jour']), x['type_transport'], x['heure']))
         
