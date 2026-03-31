@@ -564,8 +564,10 @@ def upload_files(request):
                         for chunk in fichier_planning.chunks():
                             destination.write(chunk)
                     
-                    # CORRECTION ICI : Passer le chemin du fichier, pas un objet open()
-                    success = gestionnaire.charger_planning(temp_path)
+                    # CORRECTION ICI : Passer le chemin du fichier
+                    # On ouvre le fichier en mode lecture binaire pour le passer à charger_planning
+                    with open(temp_path, 'rb') as f:
+                        success = gestionnaire.charger_planning(f)
                     
                     if success:
                         # Stocker les infos dans la session
@@ -592,8 +594,9 @@ def upload_files(request):
                         info_path = os.path.join(settings.BASE_DIR, 'info.xlsx')
                         if os.path.exists(info_path):
                             try:
-                                if gestionnaire.charger_agents(info_path):
-                                    messages.info(request, '📂 Fichier info.xlsx chargé automatiquement')
+                                with open(info_path, 'rb') as f_info:
+                                    if gestionnaire.charger_agents(f_info):
+                                        messages.info(request, '📂 Fichier info.xlsx chargé automatiquement')
                             except Exception as e:
                                 print(f"⚠️ Erreur chargement info.xlsx: {e}")
                         else:
@@ -657,8 +660,9 @@ def upload_files(request):
                         for chunk in fichier_info.chunks():
                             destination.write(chunk)
                     
-                    # CORRECTION ICI : Passer le chemin du fichier
-                    success = gestionnaire.charger_agents(temp_path)
+                    # CORRECTION ICI : Passer le fichier ouvert en mode binaire
+                    with open(temp_path, 'rb') as f:
+                        success = gestionnaire.charger_agents(f)
                     
                     if success:
                         request.session['uploaded_info_file'] = {
