@@ -67,7 +67,7 @@ class GestionnaireTransport:
     def charger_planning(self, fichier):
         """
         Charge le fichier Excel de planning
-        Accepte: UploadedFile, chemin (str), BufferedReader, BytesIO
+        Structure: Ligne 1: Titre "EMS", Ligne 2: En-têtes avec dates
         """
         try:
             print("📂 Chargement du planning...")
@@ -75,39 +75,38 @@ class GestionnaireTransport:
             # Lire le contenu du fichier
             content = self._lire_contenu_fichier(fichier)
             
-            # Sauvegarder localement si c'est un chemin ou un fichier uploadé
-            if isinstance(fichier, str) and os.path.exists(fichier):
-                # C'est déjà un chemin, on le garde
-                pass
-            else:
-                # Sauvegarder pour usage futur
-                os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
-                with open(self.temp_path, 'wb') as f:
-                    f.write(content)
+            # Sauvegarder localement
+            os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+            with open(self.temp_path, 'wb') as f:
+                f.write(content)
             
             # Extraire les dates réelles
             self.extraire_dates_reelles(content)
             
-            # Lire le fichier avec pandas
-            df = pd.read_excel(BytesIO(content), engine='openpyxl')
+            # Lire tout le fichier avec pandas
+            df = pd.read_excel(BytesIO(content), header=None, engine='openpyxl')
             
-            # Trouver la ligne de début des données
-            ligne_debut = 0
+            # Trouver la ligne des en-têtes (celle qui contient "Salarié")
+            header_row_idx = None
             for idx in range(min(5, len(df))):
                 row = df.iloc[idx]
-                # Chercher la ligne avec "Salarié" ou des noms d'agents
-                if any('Salarié' in str(cell) for cell in row if pd.notna(cell)):
-                    ligne_debut = idx
-                    break
-                # Si on trouve un nom d'agent plausible
-                if any(isinstance(cell, str) and len(cell) > 3 and ' ' in cell for cell in row if pd.notna(cell)):
-                    ligne_debut = idx
+                for cell in row:
+                    if pd.notna(cell) and isinstance(cell, str):
+                        if 'salarié' in str(cell).lower() or 'salarie' in str(cell).lower():
+                            header_row_idx = idx
+                            break
+                if header_row_idx is not None:
                     break
             
-            # Lire à partir de la ligne trouvée
-            if ligne_debut > 0:
-                self.df_planning = pd.read_excel(BytesIO(content), skiprows=ligne_debut, engine='openpyxl')
+            if header_row_idx is not None:
+                # Lire à partir de la ligne après l'en-tête
+                self.df_planning = pd.read_excel(
+                    BytesIO(content), 
+                    skiprows=header_row_idx + 1,  # +1 pour sauter la ligne des en-têtes
+                    engine='openpyxl'
+                )
             else:
+                # Fallback: essayer de lire normalement
                 self.df_planning = df
             
             # Nettoyer le dataframe
@@ -123,6 +122,7 @@ class GestionnaireTransport:
             self.df_planning.columns = noms_colonnes
             
             print(f"✅ Planning chargé: {len(self.df_planning)} lignes")
+            print(f"📅 Dates disponibles: {self.dates_par_jour}")
             return True
                 
         except Exception as e:
@@ -211,7 +211,7 @@ class GestionnaireTransport:
     def extraire_dates_reelles(self, fichier):
         """
         Extrait les dates réelles du fichier Excel
-        Accepte: UploadedFile, chemin (str), BufferedReader, BytesIO, ou contenu bytes
+        Structure: Ligne 1: "EMS", Ligne 2: "Salarié", "Lundi 30/03", "Mardi 31/03", etc.
         """
         try:
             print("📅 Tentative d'extraction des dates...")
@@ -222,68 +222,97 @@ class GestionnaireTransport:
             else:
                 content = self._lire_contenu_fichier(fichier)
             
-            # Lire avec pandas
+            # Lire avec pandas sans en-tête
             df_raw = pd.read_excel(BytesIO(content), header=None, engine='openpyxl')
             
-            # Chercher la ligne contenant les dates
-            date_row_index = None
+            print(f"📊 Structure du fichier: {len(df_raw)} lignes, {len(df_raw.columns)} colonnes")
+            
+            # Chercher la ligne des en-têtes (celle qui contient "Salarié")
+            header_row_idx = None
             for idx in range(min(5, len(df_raw))):
                 row = df_raw.iloc[idx]
-                date_count = 0
                 for cell in row:
-                    if pd.notna(cell):
-                        cell_str = str(cell)
-                        # Rechercher des motifs de date
-                        if re.search(r'\d{1,2}[\/\-]\d{1,2}', cell_str) or isinstance(cell, (datetime, pd.Timestamp)):
-                            date_count += 1
-                
-                if date_count >= 3:  # Si au moins 3 cellules semblent être des dates
-                    date_row_index = idx
+                    if pd.notna(cell) and isinstance(cell, str):
+                        if 'salarié' in str(cell).lower() or 'salarie' in str(cell).lower():
+                            header_row_idx = idx
+                            print(f"✅ Ligne des en-têtes trouvée à l'index {idx}")
+                            break
+                if header_row_idx is not None:
                     break
             
-            # Mapping des colonnes vers les jours
-            colonne_vers_jour = {
-                1: 'Lundi', 2: 'Mardi', 3: 'Mercredi', 4: 'Jeudi',
-                5: 'Vendredi', 6: 'Samedi', 7: 'Dimanche'
-            }
+            if header_row_idx is None:
+                print("⚠️ Ligne des en-têtes non trouvée, recherche alternative...")
+                # Chercher une ligne avec des motifs de date
+                for idx in range(min(10, len(df_raw))):
+                    row = df_raw.iloc[idx]
+                    date_count = 0
+                    for cell in row:
+                        if pd.notna(cell):
+                            cell_str = str(cell)
+                            if re.search(r'\d{1,2}[\/\-]\d{1,2}', cell_str):
+                                date_count += 1
+                    if date_count >= 3:
+                        header_row_idx = idx
+                        print(f"✅ Ligne avec dates trouvée à l'index {idx}")
+                        break
             
-            if date_row_index is not None:
-                date_row = df_raw.iloc[date_row_index]
-                print(f"📊 Ligne de dates trouvée à l'index {date_row_index}")
+            # Si on a trouvé la ligne des en-têtes
+            if header_row_idx is not None:
+                header_row = df_raw.iloc[header_row_idx]
                 
-                for col_idx, jour_nom in colonne_vers_jour.items():
-                    if col_idx < len(date_row):
-                        cell_value = date_row[col_idx]
-                        if pd.notna(cell_value):
+                # Mapping des colonnes vers les jours
+                jours_ordre = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+                
+                # Parcourir les colonnes (commencer à l'index 1 car index 0 est "Salarié")
+                for col_idx in range(1, min(8, len(header_row))):
+                    cell_value = header_row[col_idx]
+                    if pd.notna(cell_value):
+                        cell_str = str(cell_value).strip()
+                        jour_nom = jours_ordre[col_idx - 1]  # Colonne 1 = Lundi, etc.
+                        print(f"  {jour_nom} (colonne {col_idx}): '{cell_str}'")
+                        
+                        # Essayer d'extraire la date de la chaîne (ex: "Lundi 30/03" -> "30/03")
+                        date_match = re.search(r'(\d{1,2}[\/\-]\d{1,2})', cell_str)
+                        if date_match:
+                            date_str = date_match.group(1)
+                            # Ajouter l'année (2026)
                             try:
-                                if isinstance(cell_value, (datetime, pd.Timestamp)):
-                                    date_obj = cell_value
+                                date_obj = datetime.strptime(f"{date_str}/2026", "%d/%m/%Y")
+                                self.dates_par_jour[jour_nom] = date_obj.strftime("%d/%m/%Y")
+                                print(f"    ✅ Date extraite: {self.dates_par_jour[jour_nom]}")
+                            except:
+                                # Essayer avec l'année courante
+                                try:
+                                    date_obj = datetime.strptime(f"{date_str}/{datetime.now().year}", "%d/%m/%Y")
                                     self.dates_par_jour[jour_nom] = date_obj.strftime("%d/%m/%Y")
-                                    print(f"  ✅ {jour_nom}: {self.dates_par_jour[jour_nom]}")
-                                else:
-                                    cell_str = str(cell_value).strip()
-                                    # Essayer de parser
-                                    for fmt in ['%d/%m/%Y', '%d-%m-%Y', '%d/%m/%y', '%d-%m-%y']:
-                                        try:
-                                            date_obj = datetime.strptime(cell_str, fmt)
-                                            self.dates_par_jour[jour_nom] = date_obj.strftime("%d/%m/%Y")
-                                            print(f"  ✅ {jour_nom}: {self.dates_par_jour[jour_nom]}")
-                                            break
-                                        except:
-                                            continue
-                            except Exception as e:
-                                print(f"  ⚠️ {jour_nom}: conversion impossible - {e}")
+                                    print(f"    ✅ Date extraite (année courante): {self.dates_par_jour[jour_nom]}")
+                                except:
+                                    print(f"    ⚠️ Impossible de parser: {date_str}")
+                        else:
+                            # Essayer de parser directement la chaîne
+                            try:
+                                date_obj = pd.to_datetime(cell_str, errors='coerce')
+                                if pd.notna(date_obj):
+                                    self.dates_par_jour[jour_nom] = date_obj.strftime("%d/%m/%Y")
+                                    print(f"    ✅ Date parsée: {self.dates_par_jour[jour_nom]}")
+                            except:
+                                print(f"    ⚠️ Impossible d'extraire la date de: {cell_str}")
+            else:
+                print("⚠️ Aucune ligne d'en-tête trouvée")
             
             # Si aucune date extraite, générer par défaut
             if not self.dates_par_jour:
                 print("⚠️ Aucune date extraite, génération automatique...")
                 self.generer_dates_par_defaut()
+            else:
+                print(f"📅 Dates extraites: {self.dates_par_jour}")
             
-            print(f"📅 Dates extraites: {self.dates_par_jour}")
             return self.dates_par_jour
                 
         except Exception as e:
             print(f"❌ Erreur extraction dates: {e}")
+            import traceback
+            traceback.print_exc()
             self.generer_dates_par_defaut()
             return self.dates_par_jour
     
@@ -344,10 +373,16 @@ class GestionnaireTransport:
     
     def extraire_heures(self, planning_str):
         """Extrait les créneaux horaires d'une chaîne de planning"""
-        if pd.isna(planning_str) or str(planning_str).strip() in ['', 'REPOS', 'ABSENCE', 'OFF', 'MALADIE', 'CONGÉ PAYÉ', 'CONGÉ MATERNITÉ']:
+        if pd.isna(planning_str) or str(planning_str).strip() in ['', 'REPOS', 'ABSENCE', 'OFF', 'MALADIE', 'CONGÉ PAYÉ', 'CONGÉ MATERNITÉ', 'CONGÉ PAYÉ']:
             return []
         
         texte = str(planning_str).strip().upper()
+        
+        # Remplacer CH et autres indicateurs
+        texte = re.sub(r'CH\s+', ' ', texte)
+        texte = re.sub(r'R\s+', ' ', texte)
+        texte = re.sub(r'F\s+', ' ', texte)
+        texte = re.sub(r'V\s+', ' ', texte)
         
         # Nettoyer le texte
         texte_propre = re.sub(r'[^0-9H\s\-:]', ' ', texte)
@@ -364,13 +399,37 @@ class GestionnaireTransport:
             matches = re.findall(pattern, texte_propre)
             for match in matches:
                 if isinstance(match, tuple) and len(match) >= 2:
-                    heure_debut = int(match[0])
-                    heure_fin = int(match[1])
-                    
-                    if heure_fin < heure_debut and heure_fin < 12:
-                        heure_fin += 24
-                    
-                    creneaux.append((heure_debut, heure_fin))
+                    try:
+                        heure_debut = int(match[0])
+                        heure_fin = int(match[1])
+                        
+                        # Gérer les heures de nuit
+                        if heure_fin < heure_debut and heure_fin < 12:
+                            heure_fin += 24
+                        elif heure_fin < heure_debut and heure_fin >= 12:
+                            # Format 18h-3h -> 18h-27h
+                            heure_fin += 24
+                        
+                        creneaux.append((heure_debut, heure_fin))
+                        print(f"  ✅ Créneau: {heure_debut}h-{heure_fin}h")
+                    except:
+                        continue
+        
+        # Si aucun créneau trouvé, chercher les paires de nombres
+        if not creneaux:
+            heures_trouvees = re.findall(r'\b\d{1,2}\b', texte_propre)
+            if len(heures_trouvees) >= 2:
+                for i in range(0, len(heures_trouvees) - 1, 2):
+                    try:
+                        heure_debut = int(heures_trouvees[i])
+                        heure_fin = int(heures_trouvees[i + 1])
+                        
+                        if heure_fin < heure_debut and heure_fin < 12:
+                            heure_fin += 24
+                        
+                        creneaux.append((heure_debut, heure_fin))
+                    except:
+                        continue
         
         return creneaux
     
@@ -439,13 +498,20 @@ class GestionnaireTransport:
                         heure_debut_ajustee = heure_debut
                         heure_fin_ajustee = heure_fin
                     
-                    # Ramassage
-                    if type_transport_selectionne in ['tous', 'ramassage'] and heure_debut_ajustee in heures_ramassage:
+                    # Ramassage (heure de début)
+                    heure_debut_comparaison = heure_debut_ajustee
+                    if heure_debut_comparaison >= 24:
+                        heure_debut_comparaison = heure_debut_comparaison - 24
+                    
+                    if type_transport_selectionne in ['tous', 'ramassage'] and heure_debut_comparaison in heures_ramassage:
+                        heure_affichage = heure_debut_ajustee
+                        if heure_affichage >= 24:
+                            heure_affichage = heure_affichage - 24
                         liste_transports.append({
                             'agent': nom_agent,
                             'jour': jour_nom,
                             'heure': heure_debut_ajustee,
-                            'heure_affichage': f"{heure_debut_ajustee}h",
+                            'heure_affichage': f"{heure_affichage}h",
                             'adresse': info_agent['adresse'],
                             'telephone': info_agent['telephone'],
                             'societe': info_agent['societe'],
@@ -455,15 +521,15 @@ class GestionnaireTransport:
                             'agent_id': info_agent['agent_obj'].id if info_agent['agent_obj'] else None
                         })
                     
-                    # Départ
+                    # Départ (heure de fin)
                     heure_fin_comparaison = heure_fin_ajustee % 24
                     if type_transport_selectionne in ['tous', 'depart'] and heure_fin_comparaison in heures_depart:
-                        heure_fin_affichee = heure_fin_ajustee % 24
+                        heure_affichage = heure_fin_ajustee % 24
                         liste_transports.append({
                             'agent': nom_agent,
                             'jour': jour_nom,
                             'heure': heure_fin_ajustee,
-                            'heure_affichage': f"{heure_fin_affichee}h",
+                            'heure_affichage': f"{heure_affichage}h",
                             'adresse': info_agent['adresse'],
                             'telephone': info_agent['telephone'],
                             'societe': info_agent['societe'],
@@ -516,19 +582,18 @@ class GestionnaireTransport:
         except Exception as e:
             print(f"Erreur get_agents_non_affectes: {e}")
             return []
-    def verifier_date_dans_planning(gestionnaire, date_cible):
     
-        if not hasattr(gestionnaire, 'dates_extractees'):
+    def verifier_date_dans_planning(self, date_cible):
+        """Vérifie si une date est présente dans le planning"""
+        if not self.dates_par_jour:
             return False, "Aucune date extraite du planning"
-    
+        
         jours_fr = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         jour_semaine_cible = jours_fr[date_cible.weekday()]
-    
-        dates_extractees = gestionnaire.dates_extractees
-    
+        
         # Vérifier si le jour de la semaine existe
-        if jour_semaine_cible not in dates_extractees:
-            dates_disponibles = "\n".join([f"• {jour}: {date}" for jour, date in dates_extractees.items()])
+        if jour_semaine_cible not in self.dates_par_jour:
+            dates_disponibles = "\n".join([f"• {jour}: {date}" for jour, date in self.dates_par_jour.items()])
             error_msg = (
                 f"{jour_semaine_cible} non présent dans le planning.\n\n"
                 f"Dates disponibles :\n"
@@ -536,13 +601,12 @@ class GestionnaireTransport:
                 f"Veuillez charger un fichier contenant le {jour_semaine_cible} {date_cible.strftime('%d/%m/%Y')}."
             )
             return False, error_msg
-    
-        # Vérifier si la date correspond
-        date_str = dates_extractees[jour_semaine_cible]
-        try:
-            from datetime import datetime
-            date_extracted = datetime.strptime(date_str, '%d/%m/%Y').date()
         
+        # Vérifier si la date correspond
+        date_str = self.dates_par_jour[jour_semaine_cible]
+        try:
+            date_extracted = datetime.strptime(date_str, '%d/%m/%Y').date()
+            
             if date_extracted != date_cible:
                 error_msg = (
                     f"Décalage de dates détecté !\n\n"
@@ -551,10 +615,9 @@ class GestionnaireTransport:
                     f"Veuillez charger un fichier EMS.xlsx pour la semaine du {date_cible.strftime('%d/%m/%Y')}."
                 )
                 return False, error_msg
-        
+            
             return True, f"Date vérifiée : {date_cible.strftime('%d/%m/%Y')}"
         
         except ValueError:
             # Si le parsing échoue, on considère que c'est bon (format différent)
             return True, f"{jour_semaine_cible} présent dans le planning"
-
