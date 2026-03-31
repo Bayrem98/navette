@@ -3736,7 +3736,8 @@ def api_super_reservations_demain(request):
                 print("⚠️ Planning non chargé dans la session")
                 return JsonResponse({
                     'success': False,
-                    'error': "Planning non chargé. Veuillez d'abord charger le planning EMS.xlsx"
+                    'error': "Planning non chargé. Veuillez d'abord charger le planning EMS.xlsx",
+                    'redirect_to_upload': True
                 })
             
             # VÉRIFICATION CRITIQUE : Vérifier que la date de demain est dans le planning
@@ -3768,13 +3769,21 @@ def api_super_reservations_demain(request):
                 print(f"❌ Le planning chargé ne contient pas la date du {date_demain_str}")
                 print(f"📅 Dates disponibles dans le planning: {dates_par_jour}")
                 
-                # Afficher les dates disponibles
-                dates_disponibles = "{date}" 
+                # Formater les dates disponibles pour l'affichage
+                dates_disponibles = []
+                for jour, date_planning in dates_par_jour.items():
+                    dates_disponibles.append(f"{jour} : {date_planning}")
                 
                 return JsonResponse({
                     'success': False,
-                    'error': "Le planning chargé ne contient pas la date du demain"
-                  
+                    'error': f"Le planning chargé ne contient pas la date du {date_demain_str} ({jour_semaine})",
+                    'error_type': 'date_not_in_planning',
+                    'date_demandee': date_demain_str,
+                    'jour_demande': jour_semaine,
+                    'dates_disponibles': dates_disponibles,
+                    'dates_par_jour': dates_par_jour,
+                    'message': f"Veuillez charger un fichier EMS.xlsx pour la semaine du {date_demain_str}",
+                    'redirect_to_upload': True
                 })
             
             # Utiliser le jour correspondant trouvé
@@ -3783,9 +3792,12 @@ def api_super_reservations_demain(request):
             
         except Exception as e:
             print(f"⚠️ Erreur chargement planning: {e}")
+            import traceback
+            traceback.print_exc()
             return JsonResponse({
                 'success': False,
-                'error': f'Erreur chargement planning: {str(e)}'
+                'error': f'Erreur chargement planning: {str(e)}',
+                'redirect_to_upload': True
             })
         
         # 4. Récupérer TOUS les chauffeurs pour les options de réservation
