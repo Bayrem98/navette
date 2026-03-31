@@ -554,7 +554,7 @@ def upload_files(request):
                             print(f"⚠️ Erreur upload Cloudinary: {e}")
                             messages.warning(request, f"Upload Cloudinary échoué: {e}")
                     
-                    # Sauvegarder temporairement localement (pour compatibilité)
+                    # Sauvegarder temporairement localement
                     temp_path = os.path.join(settings.MEDIA_ROOT, f'temp_planning_{request.user.id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
                     os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
                     
@@ -564,8 +564,10 @@ def upload_files(request):
                         for chunk in fichier_planning.chunks():
                             destination.write(chunk)
                     
-                    # Charger dans le gestionnaire
-                    if gestionnaire.charger_planning(open(temp_path, 'rb')):
+                    # CORRECTION ICI : Passer le chemin du fichier, pas un objet open()
+                    success = gestionnaire.charger_planning(temp_path)
+                    
+                    if success:
                         # Stocker les infos dans la session
                         request.session['uploaded_file'] = {
                             'name': fichier_planning.name,
@@ -582,16 +584,37 @@ def upload_files(request):
                         # Sauvegarder les dates
                         if gestionnaire.dates_par_jour:
                             request.session['gestionnaire_dates'] = gestionnaire.dates_par_jour
+                            print(f"📅 Dates sauvegardées dans session après upload: {gestionnaire.dates_par_jour}")
                         
                         messages.success(request, f'✅ Fichier {fichier_planning.name} uploadé avec succès! ({row_count} lignes)')
                         
-                        # Rediriger pour éviter le re-upload
+                        # Charger automatiquement le fichier agents par défaut s'il existe
+                        info_path = os.path.join(settings.BASE_DIR, 'info.xlsx')
+                        if os.path.exists(info_path):
+                            try:
+                                if gestionnaire.charger_agents(info_path):
+                                    messages.info(request, '📂 Fichier info.xlsx chargé automatiquement')
+                            except Exception as e:
+                                print(f"⚠️ Erreur chargement info.xlsx: {e}")
+                        else:
+                            messages.warning(request, '⚠️ Fichier info.xlsx non trouvé. Vous pouvez importer les agents depuis la section "Gestion Agents".')
+                        
+                        # Rediriger vers la même page pour afficher les infos
                         return redirect('upload')
                     else:
                         messages.error(request, '❌ Erreur lors du chargement du planning')
+                        # Nettoyer le fichier temporaire en cas d'erreur
+                        if os.path.exists(temp_path):
+                            try:
+                                os.remove(temp_path)
+                            except:
+                                pass
                         
                 except Exception as e:
                     messages.error(request, f'❌ Erreur lors du traitement du fichier: {str(e)}')
+                    print(f"❌ Exception détaillée: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             # Traitement du fichier info.xlsx (informations agents)
             elif 'fichier_info' in request.FILES:
@@ -623,6 +646,7 @@ def upload_files(request):
                             print(f"✅ Fichier INFO uploadé vers Cloudinary: {cloudinary_url}")
                         except Exception as e:
                             print(f"⚠️ Erreur upload Cloudinary: {e}")
+                            messages.warning(request, f"Upload Cloudinary échoué: {e}")
                     
                     # Sauvegarder localement
                     temp_path = os.path.join(settings.MEDIA_ROOT, f'temp_info_{request.user.id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
@@ -633,8 +657,10 @@ def upload_files(request):
                         for chunk in fichier_info.chunks():
                             destination.write(chunk)
                     
-                    # Charger les agents
-                    if gestionnaire.charger_agents(open(temp_path, 'rb')):
+                    # CORRECTION ICI : Passer le chemin du fichier
+                    success = gestionnaire.charger_agents(temp_path)
+                    
+                    if success:
                         request.session['uploaded_info_file'] = {
                             'name': fichier_info.name,
                             'size': fichier_info.size,
@@ -648,13 +674,23 @@ def upload_files(request):
                         messages.success(request, f'✅ Fichier info.xlsx chargé avec succès! ({row_count} agents)')
                     else:
                         messages.error(request, '❌ Erreur lors du chargement des agents')
+                        # Nettoyer le fichier temporaire en cas d'erreur
+                        if os.path.exists(temp_path):
+                            try:
+                                os.remove(temp_path)
+                            except:
+                                pass
                         
                 except Exception as e:
                     messages.error(request, f'❌ Erreur lors du traitement du fichier info: {str(e)}')
+                    print(f"❌ Exception détaillée: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             return redirect('upload')
         else:
             messages.error(request, '❌ Formulaire invalide')
+            print(f"Erreurs formulaire: {form.errors}")
     else:
         form = UploadFileForm()
     
