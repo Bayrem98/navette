@@ -13,112 +13,199 @@
                     <i class="fas fa-check-circle"></i> Planning chargé
                 </span>
                 {% endif %}
+                {% if cloudinary_active %}
+                <span class="badge bg-info ms-2">
+                    <i class="fas fa-cloud"></i> Cloudinary
+                </span>
+                {% endif %}
             </div>
             <div class="card-body">
-  <!-- Afficher le fichier uploadé s'il existe -->
-{% if uploaded_file %}
-<div class="card mb-4 border-success">
-    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-        <h6 class="card-title mb-0">
-            <i class="fas fa-file-excel"></i> Fichier uploadé avec succès
-        </h6>
-        <span class="badge bg-light text-dark">
-            <i class="fas fa-check-circle"></i> Prêt
-        </span>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <table class="table table-sm">
-                    <tr>
-                        <th width="40%">Nom du fichier :</th>
-                        <td><strong>{{ uploaded_file.name }}</strong></td>
-                    </tr>
-                    <tr>
-                        <th>Taille :</th>
-                        <td>{{ uploaded_file.size|filesizeformat }}</td>
-                    </tr>
-                    <tr>
-                        <th>Type :</th>
-                        <td>{{ uploaded_file.content_type }}</td>
-                    </tr>
-                </table>
-            </div>
-            <div class="col-md-6">
-                <table class="table table-sm">
-                    <tr>
-                        <th width="40%">Lignes détectées :</th>
-                        <td><span class="badge bg-info">{{ uploaded_file.row_count }}</span></td>
-                    </tr>
-                    <tr>
-                        <th>Uploadé le :</th>
-                        <td>
-                            {% with uploaded_file.upload_time|slice:":19" as upload_time %}
-                            {{ upload_time|date:"d/m/Y H:i" }}
-                            {% endwith %}
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Statut :</th>
-                        <td>
-                            {% if planning_charge %}
-                            <span class="badge bg-success">Planning chargé</span>
-                            {% else %}
-                            <span class="badge bg-warning">En attente de chargement</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-        
-        <div class="mt-3">
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle"></i>
-                <strong>Prochaine étape :</strong> 
-                <a href="{% url 'liste_transports' %}" class="alert-link">Voir la liste des transports</a>
-                pour commencer les affectations.
-            </div>
-            
-            <div class="d-flex gap-2">
-                <a href="{% url 'liste_transports' %}" class="btn btn-success">
-                    <i class="fas fa-list"></i> Voir les transports
-                </a>
-                <a href="{% url 'chauffeurs' %}" class="btn btn-primary">
-                    <i class="fas fa-users"></i> Affecter des chauffeurs
-                </a>
-                <form method="post" action="{% url 'upload' %}" style="display:inline;">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="clear_file">
-                    <button type="submit" class="btn btn-danger" 
-                            onclick="return confirm('Supprimer le fichier uploadé ?')">
-                        <i class="fas fa-trash"></i> Supprimer
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
+                <!-- Afficher le fichier uploadé s'il existe -->
+                {% if uploaded_file %}
+                <div class="card mb-4 border-success">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-file-excel"></i> Fichier uploadé avec succès
+                        </h6>
+                        <span class="badge bg-light text-dark">
+                            <i class="fas fa-check-circle"></i> Prêt
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tr>
+                                        <th width="40%">Nom du fichier :</th>
+                                        <td><strong>{{ uploaded_file.name }}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Taille :</th>
+                                        <td>{{ uploaded_file.size|filesizeformat }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Type :</th>
+                                        <td>{{ uploaded_file.content_type }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tr>
+                                        <th width="40%">Lignes détectées :</th>
+                                        <td><span class="badge bg-info">{{ uploaded_file.row_count }}</span></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Uploadé le :</th>
+                                        <td>
+                                            {% with uploaded_file.upload_time|slice:":19" as upload_time %}
+                                            {{ upload_time|date:"d/m/Y H:i" }}
+                                            {% endwith %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th>Statut :</th>
+                                        <td>
+                                            {% if planning_charge %}
+                                            <span class="badge bg-success">Planning chargé</span>
+                                            {% else %}
+                                            <span class="badge bg-warning">En attente de chargement</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% if uploaded_file.cloudinary_url %}
+                                    <tr>
+                                        <th>Stockage :</th>
+                                        <td>
+                                            <span class="badge bg-primary">
+                                                <i class="fas fa-cloud"></i> Cloudinary
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                </table>
+                            </div>
+                        </div>
+                        
+                        {% if uploaded_file.cloudinary_url %}
+                        <div class="alert alert-info mt-2">
+                            <i class="fas fa-link"></i> 
+                            <a href="{{ uploaded_file.cloudinary_url }}" target="_blank">Voir le fichier sur Cloudinary</a>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mt-3">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Prochaine étape :</strong> 
+                                <a href="{% url 'liste_transports' %}" class="alert-link">Voir la liste des transports</a>
+                                pour commencer les affectations.
+                            </div>
+                            
+                            <div class="d-flex gap-2">
+                                <a href="{% url 'liste_transports' %}" class="btn btn-success">
+                                    <i class="fas fa-list"></i> Voir les transports
+                                </a>
+                                <a href="{% url 'chauffeurs' %}" class="btn btn-primary">
+                                    <i class="fas fa-users"></i> Affecter des chauffeurs
+                                </a>
+                                <form method="post" action="{% url 'upload' %}" style="display:inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="clear_file">
+                                    <button type="submit" class="btn btn-danger" 
+                                            onclick="return confirm('Supprimer le fichier uploadé ?')">
+                                        <i class="fas fa-trash"></i> Supprimer
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Afficher le fichier info uploadé s'il existe -->
+                {% if uploaded_info_file %}
+                <div class="card mb-4 border-info">
+                    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-users"></i> Fichier Agents (info.xlsx) uploadé
+                        </h6>
+                        <span class="badge bg-light text-dark">
+                            <i class="fas fa-check-circle"></i> Chargé
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tr>
+                                        <th width="40%">Nom du fichier :</th>
+                                        <td><strong>{{ uploaded_info_file.name }}</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <th>Taille :</th>
+                                        <td>{{ uploaded_info_file.size|filesizeformat }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Agents :</th>
+                                        <td><span class="badge bg-info">{{ uploaded_info_file.row_count }}</span></td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tr>
+                                        <th width="40%">Uploadé le :</th>
+                                        <td>
+                                            {% with uploaded_info_file.upload_time|slice:":19" as upload_time %}
+                                            {{ upload_time|date:"d/m/Y H:i" }}
+                                            {% endwith %}
+                                        </td>
+                                    </tr>
+                                    {% if uploaded_info_file.cloudinary_url %}
+                                    <tr>
+                                        <th>Stockage :</th>
+                                        <td>
+                                            <span class="badge bg-primary">
+                                                <i class="fas fa-cloud"></i> Cloudinary
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                </table>
+                            </div>
+                        </div>
+                        
+                        {% if uploaded_info_file.cloudinary_url %}
+                        <div class="alert alert-info mt-2">
+                            <i class="fas fa-link"></i> 
+                            <a href="{{ uploaded_info_file.cloudinary_url }}" target="_blank">Voir le fichier sur Cloudinary</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
 
                 <div class="alert alert-info">
                     <h6><i class="fas fa-info-circle"></i> Instructions :</h6>
                     <ul class="mb-0">
                         <li>Téléchargez le fichier <strong>EMS.xlsx</strong> contenant le planning des agents</li>
-                        <li>Le système chargera automatiquement le fichier <strong>info.xlsx</strong> s'il existe</li>
-                        <li>Format requis : colonnes [Salarié, Lundi, Mardi, ..., Dimanche, Qualification]</li>
+                        <li>Téléchargez le fichier <strong>info.xlsx</strong> contenant les informations des agents</li>
+                        <li>Les fichiers seront stockés sur <strong>Cloudinary</strong> (stockage cloud sécurisé)</li>
+                        <li>Format requis EMS : colonnes [Salarié, Lundi, Mardi, ..., Dimanche, Qualification]</li>
+                        <li>Format requis info : colonnes [voyant, adresse, Mobile, societe, voiture]</li>
                     </ul>
                 </div>
 
-                <!-- Section upload -->
+                <!-- Section upload EMS -->
                 <div class="card mb-4">
                     <div class="card-header bg-light">
                         <h6 class="card-title mb-0">
-                            <i class="fas fa-cloud-upload-alt"></i> Upload du fichier
+                            <i class="fas fa-cloud-upload-alt text-success"></i> Upload du Planning (EMS.xlsx)
                         </h6>
                     </div>
                     <div class="card-body">
-                        <form method="post" enctype="multipart/form-data" id="uploadForm">
+                        <form method="post" enctype="multipart/form-data" id="uploadFormEMS">
                             {% csrf_token %}
                             
                             <div class="mb-4">
@@ -127,28 +214,73 @@
                                 </label>
                                 <div class="input-group">
                                     <input type="file" name="fichier_planning" class="form-control" 
-                                           id="fileInput" accept=".xlsx,.xls" required>
+                                           id="fileInputEMS" accept=".xlsx,.xls" required>
                                     <button class="btn btn-outline-secondary" type="button" 
-                                            onclick="document.getElementById('fileInput').value=''">
+                                            onclick="document.getElementById('fileInputEMS').value=''">
                                         <i class="fas fa-times"></i> Effacer
                                     </button>
                                 </div>
                                 <div class="form-text">
-                                    Format Excel (.xlsx, .xls) - maximum 10MB
+                                    Format Excel (.xlsx, .xls) - maximum 10MB - Stockage Cloudinary
                                 </div>
                             </div>
 
-                            <!-- Aperçu du fichier -->
-                            <div id="filePreview" class="mb-3" style="display: none;">
+                            <!-- Aperçu du fichier EMS -->
+                            <div id="filePreviewEMS" class="mb-3" style="display: none;">
                                 <h6><i class="fas fa-eye"></i> Aperçu du fichier :</h6>
                                 <div class="alert alert-light border">
-                                    <div id="fileDetails"></div>
+                                    <div id="fileDetailsEMS"></div>
                                 </div>
                             </div>
 
                             <div class="d-grid">
-                                <button type="submit" class="btn btn-primary btn-lg py-3">
-                                    <i class="fas fa-upload"></i> Charger le Planning
+                                <button type="submit" class="btn btn-primary btn-lg py-3" id="submitBtnEMS">
+                                    <i class="fas fa-cloud-upload-alt"></i> Uploader le Planning vers Cloudinary
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Section upload INFO -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-cloud-upload-alt text-info"></i> Upload des Agents (info.xlsx)
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <form method="post" enctype="multipart/form-data" id="uploadFormINFO">
+                            {% csrf_token %}
+                            
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">
+                                    <i class="fas fa-users text-info"></i> Fichier des Agents (info.xlsx)
+                                </label>
+                                <div class="input-group">
+                                    <input type="file" name="fichier_info" class="form-control" 
+                                           id="fileInputINFO" accept=".xlsx,.xls">
+                                    <button class="btn btn-outline-secondary" type="button" 
+                                            onclick="document.getElementById('fileInputINFO').value=''">
+                                        <i class="fas fa-times"></i> Effacer
+                                    </button>
+                                </div>
+                                <div class="form-text">
+                                    Format Excel (.xlsx, .xls) - maximum 10MB - Informations des agents
+                                </div>
+                            </div>
+
+                            <!-- Aperçu du fichier INFO -->
+                            <div id="filePreviewINFO" class="mb-3" style="display: none;">
+                                <h6><i class="fas fa-eye"></i> Aperçu du fichier :</h6>
+                                <div class="alert alert-light border">
+                                    <div id="fileDetailsINFO"></div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-info btn-lg py-3" id="submitBtnINFO">
+                                    <i class="fas fa-cloud-upload-alt"></i> Uploader les Agents vers Cloudinary
                                 </button>
                             </div>
                         </form>
@@ -223,22 +355,22 @@
                             <div class="col-md-3">
                                 <div class="step">
                                     <span class="step-number">2</span>
+                                    <h6>Upload Agents</h6>
+                                    <small class="text-muted">Fichier info.xlsx</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="step">
+                                    <span class="step-number">3</span>
                                     <h6>Vérifier Transports</h6>
                                     <small class="text-muted">Liste des agents</small>
                                 </div>
                             </div>
                             <div class="col-md-3">
                                 <div class="step">
-                                    <span class="step-number">3</span>
+                                    <span class="step-number">4</span>
                                     <h6>Affecter Chauffeurs</h6>
                                     <small class="text-muted">Créer des courses</small>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="step">
-                                    <span class="step-number">4</span>
-                                    <h6>Générer Rapports</h6>
-                                    <small class="text-muted">PDF, cartes, paiements</small>
                                 </div>
                             </div>
                         </div>
@@ -298,7 +430,7 @@
     margin-bottom: 10px;
 }
 
-#fileInput:valid {
+#fileInputEMS:valid, #fileInputINFO:valid {
     border-color: #28a745;
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
     background-repeat: no-repeat;
@@ -308,11 +440,11 @@
 </style>
 
 <script>
-// Afficher l'aperçu du fichier sélectionné
-document.getElementById('fileInput').addEventListener('change', function(e) {
+// Aperçu du fichier EMS
+document.getElementById('fileInputEMS').addEventListener('change', function(e) {
     const file = this.files[0];
-    const preview = document.getElementById('filePreview');
-    const details = document.getElementById('fileDetails');
+    const preview = document.getElementById('filePreviewEMS');
+    const details = document.getElementById('fileDetailsEMS');
     
     if (file) {
         preview.style.display = 'block';
@@ -333,7 +465,42 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
             </div>
             <div class="mt-2">
                 <span class="badge bg-info">Format Excel détecté</span>
+                <span class="badge bg-primary"><i class="fas fa-cloud"></i> Stockage Cloudinary</span>
                 <span class="badge bg-warning">Planning horaires</span>
+            </div>
+        `;
+    } else {
+        preview.style.display = 'none';
+    }
+});
+
+// Aperçu du fichier INFO
+document.getElementById('fileInputINFO').addEventListener('change', function(e) {
+    const file = this.files[0];
+    const preview = document.getElementById('filePreviewINFO');
+    const details = document.getElementById('fileDetailsINFO');
+    
+    if (file) {
+        preview.style.display = 'block';
+        details.innerHTML = `
+            <div class="row">
+                <div class="col-6">
+                    <strong>Nom :</strong> ${file.name}
+                </div>
+                <div class="col-6">
+                    <strong>Taille :</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB
+                </div>
+                <div class="col-6">
+                    <strong>Type :</strong> ${file.type || 'application/vnd.ms-excel'}
+                </div>
+                <div class="col-6">
+                    <strong>Dernière modification :</strong> ${new Date(file.lastModified).toLocaleDateString()}
+                </div>
+            </div>
+            <div class="mt-2">
+                <span class="badge bg-info">Format Excel détecté</span>
+                <span class="badge bg-primary"><i class="fas fa-cloud"></i> Stockage Cloudinary</span>
+                <span class="badge bg-info">Informations agents</span>
             </div>
         `;
     } else {
@@ -345,8 +512,6 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
 function downloadTestFile(type) {
     const filename = type === 'ems' ? 'EMS.xlsx' : 'info.xlsx';
     alert(`Téléchargement du fichier ${filename} de test`);
-    // Dans la vraie application, rediriger vers le fichier de test
-    // window.location.href = `/static/test_files/${filename}`;
 }
 
 function showSample(type) {
@@ -455,9 +620,9 @@ function showSample(type) {
     modal.show();
 }
 
-// Validation du formulaire
-document.getElementById('uploadForm').addEventListener('submit', function(e) {
-    const fileInput = document.getElementById('fileInput');
+// Validation du formulaire EMS
+document.getElementById('uploadFormEMS').addEventListener('submit', function(e) {
+    const fileInput = document.getElementById('fileInputEMS');
     if (!fileInput.files.length) {
         e.preventDefault();
         alert('Veuillez sélectionner un fichier Excel');
@@ -477,15 +642,47 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
         return false;
     }
     
-    if (file.size > 10 * 1024 * 1024) { // 10MB
+    if (file.size > 10 * 1024 * 1024) {
         e.preventDefault();
         alert('Le fichier est trop volumineux (max 10MB)');
         return false;
     }
     
-    // Afficher un indicateur de chargement
-    const submitBtn = this.querySelector('button[type="submit"]');
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+    const submitBtn = document.getElementById('submitBtnEMS');
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upload vers Cloudinary...';
+    submitBtn.disabled = true;
+});
+
+// Validation du formulaire INFO
+document.getElementById('uploadFormINFO').addEventListener('submit', function(e) {
+    const fileInput = document.getElementById('fileInputINFO');
+    if (!fileInput.files.length) {
+        e.preventDefault();
+        alert('Veuillez sélectionner un fichier Excel');
+        fileInput.focus();
+        return false;
+    }
+    
+    const file = fileInput.files[0];
+    const validTypes = [
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    
+    if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
+        e.preventDefault();
+        alert('Veuillez sélectionner un fichier Excel valide (.xlsx, .xls)');
+        return false;
+    }
+    
+    if (file.size > 10 * 1024 * 1024) {
+        e.preventDefault();
+        alert('Le fichier est trop volumineux (max 10MB)');
+        return false;
+    }
+    
+    const submitBtn = document.getElementById('submitBtnINFO');
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upload vers Cloudinary...';
     submitBtn.disabled = true;
 });
 </script>

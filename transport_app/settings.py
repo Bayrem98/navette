@@ -299,3 +299,32 @@ if not DEBUG:
 
 # Créer le dossier logs s'il n'existe pas
 os.makedirs(BASE_DIR / 'logs', exist_ok=True)
+
+# Configuration Cloudinary
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+
+# Cloudinary configuration (à ajouter dans les variables d'environnement)
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME', ''),
+    'API_KEY': os.environ.get('CLOUDINARY_API_KEY', ''),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET', ''),
+}
+
+# Configurer Cloudinary seulement si les clés sont présentes
+if CLOUDINARY_STORAGE['CLOUD_NAME'] and CLOUDINARY_STORAGE['API_KEY'] and CLOUDINARY_STORAGE['API_SECRET']:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_STORAGE['CLOUD_NAME'],
+        api_key=CLOUDINARY_STORAGE['API_KEY'],
+        api_secret=CLOUDINARY_STORAGE['API_SECRET']
+    )
+    CLOUDINARY_ACTIVE = True
+    print("✅ Cloudinary configuré avec succès")
+else:
+    CLOUDINARY_ACTIVE = False
+    print("⚠️ Cloudinary non configuré - les fichiers seront stockés localement")
+
+# Optionnel: Utiliser Cloudinary pour le stockage des médias
+if CLOUDINARY_ACTIVE:
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
