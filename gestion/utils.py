@@ -2,6 +2,7 @@ import pandas as pd
 import re
 from datetime import datetime, timedelta
 import os
+import requests
 from io import BytesIO
 from django.conf import settings
 from django.core.cache import cache
@@ -16,31 +17,30 @@ class GestionnaireTransport:
                 type_transport=type_transport, 
                 active=True
             ).order_by('ordre')
-            cache.set(cache_key, heures, 3600)  # Cache 1 heure
+            cache.set(cache_key, heures, 3600)
         return [(heure_obj.heure, heure_obj.libelle) for heure_obj in heures]
     
-    def __init__(self):
+    def __init__(self, request=None):
         self.df_planning = None
         self.df_agents = None
         self.dates_par_jour = {}
         self.temp_path = os.path.join(settings.MEDIA_ROOT, 'temp_planning.xlsx')
-        self._cache_transports = {}  # Cache pour les résultats de traiter_donnees
+        self._cache_transports = {}
+        self.request = request
     
     def _lire_contenu_fichier(self, fichier):
-        """
-        Lit le contenu d'un fichier quel que soit son type:
-        - UploadedFile (Django)
-        - BufferedReader (open())
-        - Chemin de fichier (str)
-        - BytesIO
-        Retourne le contenu binaire
-        """
+        """Lit le contenu d'un fichier quel que soit son type"""
         try:
             if hasattr(fichier, 'read'):
                 content = fichier.read()
                 if hasattr(fichier, 'seek'):
                     fichier.seek(0)
                 return content
+            elif isinstance(fichier, str) and fichier.startswith('http'):
+                # C'est une URL Cloudinary
+                response = requests.get(fichier)
+                response.raise_for_status()
+                return response.content
             elif isinstance(fichier, str) and os.path.exists(fichier):
                 with open(fichier, 'rb') as f:
                     return f.read()
@@ -54,15 +54,29 @@ class GestionnaireTransport:
             print(f"❌ Erreur lecture fichier: {e}")
             raise
     
+    def charger_planning_depuis_url(self, url):
+        """Charge le planning depuis une URL Cloudinary"""
+        try:
+            print(f"📂 Chargement du planning depuis Cloudinary: {url}")
+            content = self._lire_contenu_fichier(url)
+            
+            os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+            with open(self.temp_path, 'wb') as f:
+                f.write(content)
+            
+            return self.charger_planning(content)
+        except Exception as e:
+            print(f"❌ Erreur chargement depuis URL: {e}")
+            return False
+    
     def charger_planning(self, fichier):
-        """
-        Charge le fichier Excel de planning
-        Structure: Ligne 1: Titre "EMS", Ligne 2: En-têtes avec dates
-        """
+        """Charge le fichier Excel de planning"""
         try:
             print("📂 Chargement du planning...")
             
             content = self._lire_contenu_fichier(fichier)
+            
+            # Sauvegarder localement
             os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
             with open(self.temp_path, 'wb') as f:
                 f.write(content)
@@ -101,7 +115,6 @@ class GestionnaireTransport:
             
             self.df_planning.columns = noms_colonnes
             
-            # Vider le cache après rechargement
             self._cache_transports = {}
             
             print(f"✅ Planning chargé: {len(self.df_planning)} lignes")
@@ -114,81 +127,29 @@ class GestionnaireTransport:
             traceback.print_exc()
             return False
     
-    def charger_agents(self, fichier):
-        """
-        Charge le fichier Excel des agents (info.xlsx)
-        """
-        try:
-            print("📂 Chargement des agents...")
-            
-            content = self._lire_contenu_fichier(fichier)
-            agents_path = os.path.join(settings.MEDIA_ROOT, 'temp_agents.xlsx')
-            os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
-            with open(agents_path, 'wb') as f:
-                f.write(content)
-            
-            df = pd.read_excel(BytesIO(content), engine='openpyxl')
-            self.df_agents = df
-            
-            print(f"✅ Agents chargés: {len(df)} lignes")
-            
-            for index, row in df.iterrows():
-                nom = row.get('voyant', '')
-                if nom and pd.notna(nom):
-                    nom_str = str(nom).strip()
-                    if not nom_str:
-                        continue
-                    
-                    try:
-                        agent, created = Agent.objects.get_or_create(
-                            nom=nom_str,
-                            defaults={
-                                'adresse': str(row.get('adresse', 'Adresse à compléter')),
-                                'telephone': str(row.get('Mobile', '00000000')),
-                                'voiture_personnelle': str(row.get('voiture', '')).lower() in ['oui', 'yes', 'true', '1']
-                            }
-                        )
-                        
-                        societe_nom = row.get('societe', '')
-                        if societe_nom and pd.notna(societe_nom):
-                            societe_nom_str = str(societe_nom).strip()
-                            if societe_nom_str:
-                                societe_obj, _ = Societe.objects.get_or_create(
-                                    nom=societe_nom_str,
-                                    defaults={'adresse': '', 'telephone': ''}
-                                )
-                                agent.societe = societe_obj
-                                agent.societe_texte = None
-                                agent.save()
-                                
-                    except Exception as e:
-                        print(f"⚠️ Erreur import agent {nom}: {e}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ Erreur chargement agents: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
     def recharger_planning_depuis_session(self):
-        """Recharge le planning depuis le fichier temporaire"""
+        """Recharge le planning depuis la session (fichier local ou Cloudinary)"""
         try:
+            if self.request and self.request.session.get('uploaded_file'):
+                file_info = self.request.session.get('uploaded_file')
+                cloudinary_url = file_info.get('cloudinary_url')
+                
+                if cloudinary_url:
+                    print(f"📂 Rechargement depuis Cloudinary: {cloudinary_url}")
+                    return self.charger_planning_depuis_url(cloudinary_url)
+            
             if os.path.exists(self.temp_path):
+                print(f"📂 Rechargement depuis fichier local: {self.temp_path}")
                 return self.charger_planning(self.temp_path)
             else:
-                print("⚠️ Fichier planning temporaire non trouvé")
+                print("⚠️ Aucun fichier planning trouvé")
                 return False
         except Exception as e:
             print(f"❌ Erreur rechargement planning: {e}")
             return False
     
     def extraire_dates_reelles(self, fichier):
-        """
-        Extrait les dates réelles du fichier Excel
-        Structure: Ligne 1: "EMS", Ligne 2: "Salarié", "Lundi 30/03", etc.
-        """
+        """Extrait les dates réelles du fichier Excel"""
         try:
             print("📅 Tentative d'extraction des dates...")
             
@@ -272,7 +233,7 @@ class GestionnaireTransport:
             return self.dates_par_jour
     
     def generer_dates_par_defaut(self):
-        """Génère des dates par défaut (lundi de la semaine courante)"""
+        """Génère des dates par défaut"""
         aujourd_hui = datetime.now()
         jours_ordre = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         
@@ -287,7 +248,7 @@ class GestionnaireTransport:
         print(f"📅 Dates par défaut: {self.dates_par_jour}")
     
     def get_info_agent(self, nom_agent):
-        """Récupère les informations d'un agent depuis la base avec cache"""
+        """Récupère les informations d'un agent"""
         try:
             agent_db = Agent.objects.filter(nom__icontains=nom_agent).first()
             if agent_db:
@@ -327,13 +288,12 @@ class GestionnaireTransport:
             }
     
     def extraire_heures(self, planning_str):
-        """Extrait les créneaux horaires d'une chaîne de planning"""
-        if pd.isna(planning_str) or str(planning_str).strip() in ['', 'REPOS', 'ABSENCE', 'OFF', 'MALADIE', 'CONGÉ PAYÉ', 'CONGÉ MATERNITÉ', 'CONGÉ PAYÉ']:
+        """Extrait les créneaux horaires"""
+        if pd.isna(planning_str) or str(planning_str).strip() in ['', 'REPOS', 'ABSENCE', 'OFF', 'MALADIE', 'CONGÉ PAYÉ', 'CONGÉ MATERNITÉ']:
             return []
         
         texte = str(planning_str).strip().upper()
         
-        # Nettoyer le texte
         texte = re.sub(r'CH\s+', ' ', texte)
         texte = re.sub(r'R\s+', ' ', texte)
         texte = re.sub(r'F\s+', ' ', texte)
@@ -355,10 +315,9 @@ class GestionnaireTransport:
                         heure_debut = int(match[0])
                         heure_fin = int(match[1])
                         
-                        # Validation des heures
                         if heure_debut > 23:
                             continue
-                        if heure_fin > 27:  # Max 3h du matin
+                        if heure_fin > 27:
                             continue
                         
                         if heure_fin < heure_debut and heure_fin < 12:
@@ -387,24 +346,22 @@ class GestionnaireTransport:
                     except:
                         continue
         
-        # Limiter le nombre de créneaux
         if len(creneaux) > 5:
             creneaux = creneaux[:5]
         
         return creneaux
     
     def _preparer_tous_les_transports(self):
-        """Prépare tous les transports en une seule passe (optimisation)"""
+        """Prépare tous les transports en une seule passe"""
         if self.df_planning is None or self.df_planning.empty:
             return {}
         
         cache_key = f"tous_transports_{hash(str(self.dates_par_jour))}"
         
-        # Vérifier si déjà en cache
         if cache_key in self._cache_transports:
             return self._cache_transports[cache_key]
         
-        print("📊 Préparation de tous les transports (une seule passe)...")
+        print("📊 Préparation de tous les transports...")
         
         transports_par_heure = {}
         
@@ -458,11 +415,11 @@ class GestionnaireTransport:
                         })
         
         self._cache_transports[cache_key] = transports_par_heure
-        print(f"✅ Préparation terminée: {len(transports_par_heure)} créneaux différents")
+        print(f"✅ Préparation terminée: {len(transports_par_heure)} créneaux")
         return transports_par_heure
     
     def traiter_donnees(self, filtre_form):
-        """Traite les données du planning avec les filtres - VERSION OPTIMISÉE"""
+        """Traite les données du planning avec les filtres"""
         if self.df_planning is None or self.df_planning.empty:
             print("❌ df_planning est None ou vide")
             return []
@@ -472,7 +429,6 @@ class GestionnaireTransport:
         heure_ete_active = filtre_form.cleaned_data.get('heure_ete', False)
         filtre_agents = filtre_form.cleaned_data.get('filtre_agents', 'tous')
         
-        # Récupérer les heures configurées
         heures_ramassage = []
         heures_depart = []
         
@@ -481,28 +437,22 @@ class GestionnaireTransport:
         if type_transport_selectionne in ['tous', 'depart']:
             heures_depart = [h for h, _ in self.get_heures_config('depart')]
         
-        # Récupérer tous les transports pré-calculés
         tous_transports = self._preparer_tous_les_transports()
         
         liste_transports = []
         
         for (jour, heure, type_transport), agents in tous_transports.items():
-            # Filtrer par jour
             if jour_selectionne != 'Tous' and jour != jour_selectionne:
                 continue
             
-            # Filtrer par type de transport
             if type_transport_selectionne != 'tous' and type_transport != type_transport_selectionne:
                 continue
             
-            # Filtrer par heure
-            heure_a_verifier = heure
             if type_transport == 'ramassage' and heure not in heures_ramassage:
                 continue
             if type_transport == 'depart' and heure not in heures_depart:
                 continue
             
-            # Ajustement heure d'été
             if heure_ete_active:
                 heure_affichee = heure - 1
                 if heure_affichee < 0:
@@ -510,7 +460,6 @@ class GestionnaireTransport:
             else:
                 heure_affichee = heure
             
-            # Ajouter les transports
             for agent_data in agents:
                 if filtre_agents == 'complets' and not agent_data['est_complet']:
                     continue
@@ -531,7 +480,6 @@ class GestionnaireTransport:
                     'agent_id': agent_data['agent_id']
                 })
         
-        # Trier
         ordre_jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         liste_transports.sort(key=lambda x: (ordre_jours.index(x['jour']), x['type_transport'], x['heure']))
         
@@ -539,7 +487,7 @@ class GestionnaireTransport:
         return liste_transports
 
     def get_agents_non_affectes(self, jour, type_transport, heure, date_reelle):
-        """Retourne les agents non encore affectés pour ce jour/type/heure"""
+        """Retourne les agents non encore affectés"""
         try:
             date_obj = datetime.strptime(date_reelle, "%d/%m/%Y").date()
             
