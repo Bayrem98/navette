@@ -2318,8 +2318,14 @@ def api_creer_course(request):
         
         from datetime import datetime
         now = datetime.now()
-        heure_actuelle = now.hour
+        # 🇹🇳 MODIFICATION TUNISIE : Ajout de +1 heure pour compenser le décalage horaire
+        # L'application est sur l'heure française (UTC+2), mais la Tunisie est à UTC+1
+        # On ajoute +1 à l'heure actuelle pour avoir l'heure tunisienne
+        heure_actuelle = (now.hour + 1) % 24
         date_actuelle = now.date()
+        
+        print(f"🇹🇳 Heure actuelle (France): {now.hour}h")
+        print(f"🇹🇳 Heure actuelle (Tunisie): {heure_actuelle}h")
         
         try:
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -2328,7 +2334,7 @@ def api_creer_course(request):
         
         heure_int = int(heure)
         
-        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle: {heure_actuelle}h")
+        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle (Tunisie): {heure_actuelle}h")
         print(f"📅 Date demandée: {date_obj}, Date actuelle: {date_actuelle}")
         
         # ✅ CORRECTION CRITIQUE: Gestion du cycle de travail 6h-4h
@@ -2620,7 +2626,9 @@ def api_creer_course(request):
                 'hors_planning_count': len(agents_hors_planning),
                 'notifications_admin': notifications_crees,
                 'notifications_super': super_notifications_crees,
-                'agents_non_trouves': agents_non_trouves
+                'agents_non_trouves': agents_non_trouves,
+                'heure_tunisie': heure_actuelle,
+                'heure_france': now.hour
             }
         }
         
