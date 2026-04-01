@@ -752,32 +752,19 @@ def upload_files(request):
     return render(request, 'gestion/upload.html', context)
 @login_required
 def liste_transports(request):
+  
     # Vérifier si un planning est chargé
     if not request.session.get('planning_charge'):
-        # Essayer de charger depuis Cloudinary
-        uploaded_file = request.session.get('uploaded_file')
-        if uploaded_file and uploaded_file.get('cloudinary_url'):
-            gestionnaire = GestionnaireTransport(request=request)
-            if gestionnaire.charger_planning_depuis_url(uploaded_file['cloudinary_url']):
-                request.session['planning_charge'] = True
-                if gestionnaire.dates_par_jour:
-                    request.session['gestionnaire_dates'] = gestionnaire.dates_par_jour
-                messages.info(request, "Planning chargé automatiquement depuis Cloudinary")
-            else:
-                messages.warning(request, "Veuillez d'abord charger un fichier de planning")
-                return redirect('upload')
-        else:
-            messages.warning(request, "Veuillez d'abord charger un fichier de planning")
-            return redirect('upload')
+        messages.warning(request, "Veuillez d'abord charger un fichier de planning")
+        return redirect('upload')
     
-    gestionnaire = GestionnaireTransport(request=request)
-    if not gestionnaire.recharger_planning_depuis_session():
-     return JsonResponse({'success': False, 'error': 'Planning non chargé'})
+    gestionnaire = GestionnaireTransport()
     
     # Essayer de recharger le planning
     planning_charge = False
     if gestionnaire.recharger_planning_depuis_session():
         planning_charge = True
+        gestionnaire.dates_par_jour = request.session.get('gestionnaire_dates', {})
     else:
         messages.error(request, 'Erreur de chargement du planning. Veuillez recharger le fichier.')
         return redirect('upload')
