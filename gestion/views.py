@@ -616,8 +616,9 @@ def upload_files(request):
                         info_path = os.path.join(settings.BASE_DIR, 'info.xlsx')
                         if os.path.exists(info_path):
                             try:
-                                info_wrapper = FileWrapper(info_path)
-                                if gestionnaire.charger_agents(info_wrapper):
+                                # Utiliser le gestionnaire existant avec request
+                                gestionnaire.request = request
+                                if gestionnaire.charger_agents(info_path):
                                     messages.info(request, '📂 Fichier info.xlsx chargé automatiquement')
                             except Exception as e:
                                 print(f"⚠️ Erreur chargement info.xlsx: {e}")
@@ -758,7 +759,7 @@ def liste_transports(request):
         messages.warning(request, "Veuillez d'abord charger un fichier de planning")
         return redirect('upload')
     
-    gestionnaire = GestionnaireTransport()
+    gestionnaire = GestionnaireTransport(request=request)
     
     # Essayer de recharger le planning
     planning_charge = False
@@ -904,7 +905,7 @@ def generer_pdf(request):
     elements.append(Paragraph("<br/>", styles['Normal']))
     
     # Recharger les données exactement comme dans liste_transports
-    gestionnaire = GestionnaireTransport()
+    gestionnaire = GestionnaireTransport(request=request)
     if gestionnaire.recharger_planning_depuis_session():
         gestionnaire.dates_par_jour = request.session.get('gestionnaire_dates', {})
         
@@ -1495,7 +1496,7 @@ def get_agents_non_affectes(request):
         print(f"🕒 Heures à chercher: {heures_a_chercher}")
         
         # Recharger le planning
-        gestionnaire = GestionnaireTransport()
+        gestionnaire = GestionnaireTransport(request=request)
         if not gestionnaire.recharger_planning_depuis_session():
             return JsonResponse([], safe=False)
         
@@ -2238,7 +2239,7 @@ def detail_societe_paie(request, societe_nom):
     affectations = affectations_filtrees
     
     # Charger le planning
-    gestionnaire = GestionnaireTransport()
+    gestionnaire = GestionnaireTransport(request=request)
     planning_charge = False
     
     if request.session.get('planning_charge'):
@@ -2641,7 +2642,7 @@ def get_agents_du_planning(request):
     
     try:
         # Utiliser le MÊME gestionnaire que dans liste_transports
-        gestionnaire = GestionnaireTransport()
+        gestionnaire = GestionnaireTransport(request=request)
         if not gestionnaire.recharger_planning_depuis_session():
             return JsonResponse({'agents': []})
         
