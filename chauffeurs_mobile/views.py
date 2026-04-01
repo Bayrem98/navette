@@ -3724,6 +3724,8 @@ def api_super_reservations_demain(request):
         ).order_by('ordre', 'heure')
         
         print(f"⏰ Heures configurées: {heures_ramassage.count()} ramassage, {heures_depart.count()} départ")
+        print(f"   Ramassage: {[h.heure for h in heures_ramassage]}")
+        print(f"   Départ: {[h.heure for h in heures_depart]}")
         
         # 3. Charger le planning
         try:
@@ -3798,10 +3800,10 @@ def api_super_reservations_demain(request):
         # 4. Récupérer TOUS les chauffeurs pour les options de réservation
         tous_chauffeurs = Chauffeur.objects.filter(actif=True).order_by('nom')
         
-        # 5. Préparer les données pour chaque heure - IMPORTANT: TRAITER HEURE PAR HEURE
+        # 5. Préparer les données pour chaque heure - TRAITER CHAQUE HEURE INDIVIDUELLEMENT
         heures_data = []
         
-        # A. Traiter les heures de RAMASSAGE - UNE HEURE À LA FOIS
+        # A. Traiter les heures de RAMASSAGE
         for heure in heures_ramassage:
             heure_valeur = heure.heure
             print(f"📊 Traitement heure: {heure_valeur}h ({heure.libelle})")
@@ -3823,6 +3825,10 @@ def api_super_reservations_demain(request):
             liste_transports = gestionnaire.traiter_donnees(form_filtre)
             
             print(f"  📋 {len(liste_transports)} agent(s) trouvé(s) pour {heure_valeur}h")
+            
+            # Afficher les premiers agents pour déboguer
+            if liste_transports:
+                print(f"     Exemples: {[t['agent'] for t in liste_transports[:3]]}")
             
             # Préparer la liste des agents pour cette heure
             agents_heure = []
@@ -3877,7 +3883,7 @@ def api_super_reservations_demain(request):
                 'agents_disponibles': len([a for a in agents_heure if not a.get('est_reserve', False)]),
             })
         
-        # B. Traiter les heures de DÉPART - UNE HEURE À LA FOIS
+        # B. Traiter les heures de DÉPART
         for heure in heures_depart:
             heure_valeur = heure.heure
             print(f"📊 Traitement heure: {heure_valeur}h ({heure.libelle})")
@@ -3899,6 +3905,10 @@ def api_super_reservations_demain(request):
             liste_transports = gestionnaire.traiter_donnees(form_filtre)
             
             print(f"  📋 {len(liste_transports)} agent(s) trouvé(s) pour {heure_valeur}h")
+            
+            # Afficher les premiers agents pour déboguer
+            if liste_transports:
+                print(f"     Exemples: {[t['agent'] for t in liste_transports[:3]]}")
             
             # Préparer la liste des agents pour cette heure
             agents_heure = []
@@ -3997,6 +4007,8 @@ def api_super_reservations_demain(request):
         total_agents_programmes = sum(h['total_agents'] for h in heures_data)
         total_reservations = reservations.count()
         total_agents_disponibles = sum(h['agents_disponibles'] for h in heures_data)
+        
+        print(f"📊 RÉSUMÉ: {total_agents_programmes} agents programmés, {total_reservations} réservations, {total_agents_disponibles} disponibles")
         
         return JsonResponse({
             'success': True,

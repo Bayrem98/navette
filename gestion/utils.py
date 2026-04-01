@@ -37,7 +37,6 @@ class GestionnaireTransport:
                     fichier.seek(0)
                 return content
             elif isinstance(fichier, str) and fichier.startswith('http'):
-                # C'est une URL Cloudinary
                 response = requests.get(fichier)
                 response.raise_for_status()
                 return response.content
@@ -185,7 +184,6 @@ class GestionnaireTransport:
     def recharger_planning_depuis_session(self):
         """Recharge le planning depuis la session (fichier local ou Cloudinary)"""
         try:
-            # Essayer depuis Cloudinary via session
             if self.request and self.request.session.get('uploaded_file'):
                 file_info = self.request.session.get('uploaded_file')
                 cloudinary_url = file_info.get('cloudinary_url')
@@ -194,7 +192,6 @@ class GestionnaireTransport:
                     print(f"📂 Rechargement depuis Cloudinary: {cloudinary_url}")
                     return self.charger_planning_depuis_url(cloudinary_url)
             
-            # Essayer depuis le fichier local
             if os.path.exists(self.temp_path):
                 print(f"📂 Rechargement depuis fichier local: {self.temp_path}")
                 return self.charger_planning(self.temp_path)
@@ -409,7 +406,7 @@ class GestionnaireTransport:
         return creneaux
     
     def _preparer_tous_les_transports(self):
-        """Prépare tous les transports en une seule passe"""
+        """Prépare tous les transports en une seule passe - avec normalisation des heures"""
         if self.df_planning is None or self.df_planning.empty:
             return {}
         
@@ -442,11 +439,20 @@ class GestionnaireTransport:
                 creneaux = self.extraire_heures(planning)
                 
                 for heure_debut, heure_fin in creneaux:
-                    if heure_debut <= 23:
-                        key = (jour_nom, heure_debut, 'ramassage')
-                        if key not in transports_par_heure:
-                            transports_par_heure[key] = []
-                        transports_par_heure[key].append({
+                    # Normalisation pour le ramassage
+                    heure_debut_norm = heure_debut
+                    if heure_debut_norm >= 24:
+                        heure_debut_norm = heure_debut_norm - 24
+                    if heure_debut_norm > 23:
+                        continue
+                    
+                    # Ramassage
+                    key_ramassage = (jour_nom, heure_debut_norm, 'ramassage')
+                    if key_ramassage not in transports_par_heure:
+                        transports_par_heure[key_ramassage] = []
+                    # Éviter les doublons
+                    if not any(a['agent'] == nom_agent for a in transports_par_heure[key_ramassage]):
+                        transports_par_heure[key_ramassage].append({
                             'agent': nom_agent,
                             'agent_id': info_agent['agent_obj'].id if info_agent['agent_obj'] else None,
                             'adresse': info_agent['adresse'],
@@ -455,12 +461,20 @@ class GestionnaireTransport:
                             'est_complet': info_agent['est_complet']
                         })
                     
-                    heure_fin_norm = heure_fin % 24
-                    if heure_fin_norm <= 23:
-                        key = (jour_nom, heure_fin_norm, 'depart')
-                        if key not in transports_par_heure:
-                            transports_par_heure[key] = []
-                        transports_par_heure[key].append({
+                    # Normalisation pour le départ
+                    heure_fin_norm = heure_fin
+                    if heure_fin_norm >= 24:
+                        heure_fin_norm = heure_fin_norm - 24
+                    if heure_fin_norm > 23:
+                        continue
+                    
+                    # Départ
+                    key_depart = (jour_nom, heure_fin_norm, 'depart')
+                    if key_depart not in transports_par_heure:
+                        transports_par_heure[key_depart] = []
+                    # Éviter les doublons
+                    if not any(a['agent'] == nom_agent for a in transports_par_heure[key_depart]):
+                        transports_par_heure[key_depart].append({
                             'agent': nom_agent,
                             'agent_id': info_agent['agent_obj'].id if info_agent['agent_obj'] else None,
                             'adresse': info_agent['adresse'],
@@ -470,11 +484,21 @@ class GestionnaireTransport:
                         })
         
         self._cache_transports[cache_key] = transports_par_heure
+        
+        # Afficher les heures disponibles pour déboguer
+        heures_disponibles = {}
+        for (jour, heure, type_t) in transports_par_heure.keys():
+            if heure not in heures_disponibles:
+                heures_disponibles[heure] = []
+            heures_disponibles[heure].append(type_t)
+        
         print(f"✅ Préparation terminée: {len(transports_par_heure)} créneaux")
+        print(f"📊 Heures disponibles: {sorted(heures_disponibles.keys())}")
+        
         return transports_par_heure
     
     def traiter_donnees(self, filtre_form):
-        """Traite les données du planning avec les filtres"""
+        """Traite les données du planning avec les filtres - avec filtrage par heure spécifique"""
         if self.df_planning is None or self.df_planning.empty:
             print("❌ df_planning est None ou vide")
             return []
@@ -483,6 +507,17 @@ class GestionnaireTransport:
         type_transport_selectionne = filtre_form.cleaned_data.get('type_transport', 'tous')
         heure_ete_active = filtre_form.cleaned_data.get('heure_ete', False)
         filtre_agents = filtre_form.cleaned_data.get('filtre_agents', 'tous')
+
+        # Récupérer l'heure spécifique si elle existe
+        heure_specifique = None
+        if hasattr(filtre_form, 'data') and filtre_form.data:
+            heure_specifique_str = filtre_form.data.get('heure_specifique', '')
+            if heure_specifique_str:
+                try:
+                    heure_specifique = int(heure_specifique_str)
+                    print(f"🎯 Heure spécifique demandée: {heure_specifique}h")
+                except:
+                    pass
         
         heures_ramassage = []
         heures_depart = []
@@ -491,23 +526,41 @@ class GestionnaireTransport:
             heures_ramassage = [h for h, _ in self.get_heures_config('ramassage')]
         if type_transport_selectionne in ['tous', 'depart']:
             heures_depart = [h for h, _ in self.get_heures_config('depart')]
+
+        # Si une heure spécifique est demandée, filtrer uniquement cette heure
+        if heure_specifique is not None:
+            if type_transport_selectionne in ['tous', 'ramassage']:
+                if heure_specifique in heures_ramassage:
+                    heures_ramassage = [heure_specifique]
+                else:
+                    heures_ramassage = []
+            if type_transport_selectionne in ['tous', 'depart']:
+                if heure_specifique in heures_depart:
+                    heures_depart = [heure_specifique]
+                else:
+                    heures_depart = []
+            print(f"🎯 Filtrage sur heure spécifique: ramassage={heures_ramassage}, depart={heures_depart}")    
         
         tous_transports = self._preparer_tous_les_transports()
         
         liste_transports = []
         
         for (jour, heure, type_transport), agents in tous_transports.items():
+            # Filtrer par jour
             if jour_selectionne != 'Tous' and jour != jour_selectionne:
                 continue
             
+            # Filtrer par type de transport
             if type_transport_selectionne != 'tous' and type_transport != type_transport_selectionne:
                 continue
             
+            # Filtrer par heure (CRITIQUE pour le filtrage spécifique)
             if type_transport == 'ramassage' and heure not in heures_ramassage:
                 continue
             if type_transport == 'depart' and heure not in heures_depart:
                 continue
             
+            # Ajustement heure d'été
             if heure_ete_active:
                 heure_affichee = heure - 1
                 if heure_affichee < 0:
@@ -515,6 +568,7 @@ class GestionnaireTransport:
             else:
                 heure_affichee = heure
             
+            # Ajouter les transports
             for agent_data in agents:
                 if filtre_agents == 'complets' and not agent_data['est_complet']:
                     continue
@@ -535,10 +589,19 @@ class GestionnaireTransport:
                     'agent_id': agent_data['agent_id']
                 })
         
+        # Trier
         ordre_jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         liste_transports.sort(key=lambda x: (ordre_jours.index(x['jour']), x['type_transport'], x['heure']))
         
-        print(f"✅ {len(liste_transports)} transports trouvés")
+        print(f"✅ {len(liste_transports)} transports trouvés pour les heures: ramassage={heures_ramassage}, depart={heures_depart}")
+        
+        # Afficher les premières heures trouvées pour déboguer
+        if liste_transports:
+            heures_trouvees = set()
+            for t in liste_transports[:20]:
+                heures_trouvees.add((t['heure'], t['type_transport']))
+            print(f"   Heures trouvées: {sorted(heures_trouvees)}")
+        
         return liste_transports
 
     def get_agents_non_affectes(self, jour, type_transport, heure, date_reelle):
