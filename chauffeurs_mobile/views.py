@@ -3674,7 +3674,7 @@ def api_super_historique_global(request):
 @csrf_exempt
 @require_GET
 def api_super_reservations_demain(request):
-    """API pour voir et réserver les agents pour demain - VERSION AVEC VÉRIFICATION DES DATES"""
+    """API pour voir et réserver les agents pour demain - VERSION AVEC GROUPEMENT PAR HEURE"""
     chauffeur_id = request.session.get('chauffeur_id')
     
     if not chauffeur_id:
@@ -3716,20 +3716,20 @@ def api_super_reservations_demain(request):
         heures_ramassage = HeureTransport.objects.filter(
             type_transport='ramassage',
             active=True
-        ).order_by('ordre')
+        ).order_by('ordre', 'heure')
         
         heures_depart = HeureTransport.objects.filter(
             type_transport='depart',
             active=True
-        ).order_by('ordre')
+        ).order_by('ordre', 'heure')
         
         print(f"⏰ Heures configurées: {heures_ramassage.count()} ramassage, {heures_depart.count()} départ")
         
-        # 3. Charger le planning EMS UNE SEULE FOIS
+        # 3. Charger le planning
         try:
             from gestion.utils import GestionnaireTransport
             
-            gestionnaire = GestionnaireTransport()
+            gestionnaire = GestionnaireTransport(request=request)
             
             # Charger le planning depuis la session
             if not gestionnaire.recharger_planning_depuis_session():
@@ -3740,7 +3740,7 @@ def api_super_reservations_demain(request):
                     'redirect_to_upload': True
                 })
             
-            # VÉRIFICATION CRITIQUE : Vérifier que la date de demain est dans le planning
+            # Vérifier que la date de demain est dans le planning
             dates_par_jour = gestionnaire.dates_par_jour
             date_demain_str = demain.strftime("%d/%m/%Y")
             
@@ -3756,7 +3756,6 @@ def api_super_reservations_demain(request):
                 print("⚠️ Date exacte non trouvée, tentative de parsing...")
                 for jour_planning, date_planning_str in dates_par_jour.items():
                     try:
-                        # Essayer de parser la date du planning
                         date_planning = datetime.strptime(date_planning_str, "%d/%m/%Y").date()
                         if date_planning == demain:
                             jour_correspondant = jour_planning
@@ -3769,7 +3768,6 @@ def api_super_reservations_demain(request):
                 print(f"❌ Le planning chargé ne contient pas la date du {date_demain_str}")
                 print(f"📅 Dates disponibles dans le planning: {dates_par_jour}")
                 
-                # Formater les dates disponibles pour l'affichage
                 dates_disponibles = []
                 for jour, date_planning in dates_par_jour.items():
                     dates_disponibles.append(f"{jour} : {date_planning}")
@@ -3781,12 +3779,9 @@ def api_super_reservations_demain(request):
                     'date_demandee': date_demain_str,
                     'jour_demande': jour_semaine,
                     'dates_disponibles': dates_disponibles,
-                    'dates_par_jour': dates_par_jour,
-                    'message': f"Veuillez charger un fichier EMS.xlsx pour la semaine du {date_demain_str}",
                     'redirect_to_upload': True
                 })
             
-            # Utiliser le jour correspondant trouvé
             jour_a_utiliser = jour_correspondant
             print(f"📊 Utilisation du planning pour: {jour_a_utiliser} ({date_demain_str})")
             
@@ -3803,15 +3798,16 @@ def api_super_reservations_demain(request):
         # 4. Récupérer TOUS les chauffeurs pour les options de réservation
         tous_chauffeurs = Chauffeur.objects.filter(actif=True).order_by('nom')
         
-        # 5. Préparer les données pour chaque heure
+        # 5. Préparer les données pour chaque heure - IMPORTANT: TRAITER HEURE PAR HEURE
         heures_data = []
         
-        # A. Traiter les heures de RAMASSAGE
+        # A. Traiter les heures de RAMASSAGE - UNE HEURE À LA FOIS
         for heure in heures_ramassage:
             heure_valeur = heure.heure
+            print(f"📊 Traitement heure: {heure_valeur}h ({heure.libelle})")
             
-            # Simuler un filtre pour cette heure spécifique
-            class FiltreFormPlanning:
+            # Créer un filtre pour cette heure spécifique
+            class FiltreFormHeure:
                 def __init__(self, jour, type_transport, heure_valeur):
                     self.cleaned_data = {
                         'jour': jour,
@@ -3821,8 +3817,12 @@ def api_super_reservations_demain(request):
                     }
                     self.data = {'heure_specifique': str(heure_valeur)}
             
-            form_filtre = FiltreFormPlanning(jour_a_utiliser, 'ramassage', heure_valeur)
+            form_filtre = FiltreFormHeure(jour_a_utiliser, 'ramassage', heure_valeur)
+            
+            # Obtenir les agents UNIQUEMENT pour cette heure
             liste_transports = gestionnaire.traiter_donnees(form_filtre)
+            
+            print(f"  📋 {len(liste_transports)} agent(s) trouvé(s) pour {heure_valeur}h")
             
             # Préparer la liste des agents pour cette heure
             agents_heure = []
@@ -3873,16 +3873,17 @@ def api_super_reservations_demain(request):
                 'type_display': 'Ramassage',
                 'agents': agents_heure,
                 'total_agents': len(agents_heure),
-                'agents_reserves': len([a for a in agents_heure if a['est_reserve']]),
-                'agents_disponibles': len([a for a in agents_heure if not a['est_reserve']]),
+                'agents_reserves': len([a for a in agents_heure if a.get('est_reserve', False)]),
+                'agents_disponibles': len([a for a in agents_heure if not a.get('est_reserve', False)]),
             })
         
-        # B. Traiter les heures de DÉPART
+        # B. Traiter les heures de DÉPART - UNE HEURE À LA FOIS
         for heure in heures_depart:
             heure_valeur = heure.heure
+            print(f"📊 Traitement heure: {heure_valeur}h ({heure.libelle})")
             
-            # Simuler un filtre pour cette heure spécifique
-            class FiltreFormPlanning:
+            # Créer un filtre pour cette heure spécifique
+            class FiltreFormHeure:
                 def __init__(self, jour, type_transport, heure_valeur):
                     self.cleaned_data = {
                         'jour': jour,
@@ -3892,8 +3893,12 @@ def api_super_reservations_demain(request):
                     }
                     self.data = {'heure_specifique': str(heure_valeur)}
             
-            form_filtre = FiltreFormPlanning(jour_a_utiliser, 'depart', heure_valeur)
+            form_filtre = FiltreFormHeure(jour_a_utiliser, 'depart', heure_valeur)
+            
+            # Obtenir les agents UNIQUEMENT pour cette heure
             liste_transports = gestionnaire.traiter_donnees(form_filtre)
+            
+            print(f"  📋 {len(liste_transports)} agent(s) trouvé(s) pour {heure_valeur}h")
             
             # Préparer la liste des agents pour cette heure
             agents_heure = []
@@ -3944,8 +3949,8 @@ def api_super_reservations_demain(request):
                 'type_display': 'Départ',
                 'agents': agents_heure,
                 'total_agents': len(agents_heure),
-                'agents_reserves': len([a for a in agents_heure if a['est_reserve']]),
-                'agents_disponibles': len([a for a in agents_heure if not a['est_reserve']]),
+                'agents_reserves': len([a for a in agents_heure if a.get('est_reserve', False)]),
+                'agents_disponibles': len([a for a in agents_heure if not a.get('est_reserve', False)]),
             })
         
         # Trier par type puis par heure
@@ -4002,7 +4007,7 @@ def api_super_reservations_demain(request):
             'jour_correspondant_planning': jour_a_utiliser,
             'date_planning': date_demain_str,
             
-            # Données principales
+            # Données principales - GROUPÉES PAR HEURE
             'heures': heures_data,
             
             # Chauffeurs avec leurs réservations
