@@ -2316,20 +2316,20 @@ def api_creer_course(request):
         if not agents_ids or len(agents_ids) == 0:
             return JsonResponse({'success': False, 'error': 'Aucun agent sélectionné'}, status=400)
         
-        # 🇫🇷 FORCER L'HEURE FRANÇAISE - Version CORRECTE
-        # NE PAS utiliser datetime.now() car il prend l'heure du serveur
-        # NE PAS utiliser l'heure du client (téléphone)
-        # On force UTC+2 (heure française)
+        from datetime import datetime, timedelta
         
+        # 🇫🇷 FORCER L'HEURE FRANÇAISE (UTC+2)
+        # On prend l'heure UTC et on ajoute 2 heures pour avoir l'heure française
         now_utc = datetime.utcnow()
         now_france = now_utc + timedelta(hours=2)  # France = UTC+2 (heure d'été)
         
+        # Utiliser l'heure française pour toutes les vérifications
         heure_actuelle = now_france.hour
         date_actuelle = now_france.date()
         
         print(f"🇫🇷 HEURE FRANÇAISE FORCÉE: {heure_actuelle}h")
         print(f"🇫🇷 DATE FRANÇAISE: {date_actuelle}")
-        print(f"🕐 UTC originale: {now_utc.hour}h")
+        print(f"🕐 Heure UTC originale: {now_utc.hour}h")
         
         try:
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -2341,7 +2341,7 @@ def api_creer_course(request):
         print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure France: {heure_actuelle}h")
         print(f"📅 Date demandée: {date_obj}, Date France: {date_actuelle}")
         
-        # ✅ Gestion du cycle de travail 6h-4h avec heure française
+        # ✅ CORRECTION CRITIQUE: Gestion du cycle de travail 6h-4h
         date_a_utiliser = date_obj
         
         if heure_actuelle >= 6:
@@ -2371,7 +2371,6 @@ def api_creer_course(request):
         
         # Vérification des heures selon l'heure française
         if heure_actuelle >= 6:
-            # On est dans la journée de travail (6h à 23h59)
             if heure_int > heure_actuelle:
                 print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
                 return JsonResponse({
@@ -2383,7 +2382,6 @@ def api_creer_course(request):
         else:
             print(f"  ✅ Nuit détectée - toutes les heures sont considérées comme passées")
         
-        # Suite de votre code (inchangé à partir d'ici)
         # Conversion du jour en français
         jours_fr = {
             'Monday': 'Lundi',
@@ -2621,8 +2619,8 @@ def api_creer_course(request):
                 'notifications_admin': notifications_crees,
                 'notifications_super': super_notifications_crees,
                 'agents_non_trouves': agents_non_trouves,
-                'heure_tunisie': heure_actuelle,
-                'heure_france': now.hour
+                'heure_france': heure_actuelle,
+                'heure_utc': now_utc.hour
             }
         }
         
@@ -2651,6 +2649,7 @@ def api_creer_course(request):
 @csrf_exempt
 @require_GET
 def api_agents_disponibles(request):
+    """API pour voir les agents disponibles - CORRIGÉ POUR CYCLE 6h-4h"""
     chauffeur_id = request.session.get('chauffeur_id')
     
     if not chauffeur_id:
@@ -2668,19 +2667,14 @@ def api_agents_disponibles(request):
         if not all([date_str, type_transport, heure]):
             return JsonResponse({'success': False, 'error': 'Paramètres manquants'})
         
-        from datetime import datetime, timedelta
-        
-        # 🇫🇷 FORCER L'HEURE FRANÇAISE (UTC+2)
-        now_utc = datetime.utcnow()
-        maintenant = now_utc + timedelta(hours=2)  # UTC+2 pour la France
-        
         date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        maintenant = timezone.now()
         maintenant_heure = maintenant.hour
         maintenant_date = maintenant.date()
         heure_int = int(heure)
         
         print(f"🔍 Recherche agents pour: {date_obj} - {type_transport} - {heure_int}h")
-        print(f"🇫🇷 Heure France: {maintenant_heure}h, Date France: {maintenant_date}")
+        print(f"🕐 Heure actuelle: {maintenant_heure}h, Date actuelle: {maintenant_date}")
         
         # ✅ CORRECTION: Gestion du cycle de travail 6h-4h
         # Une journée de travail commence à 6h et se termine à 4h le lendemain
