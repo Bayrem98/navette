@@ -2297,9 +2297,9 @@ def api_creer_course(request):
         
         print("="*60)
         print(f"📝 CRÉATION COURSE")
-        print(f"📅 Date reçue: {date_str}")
+        print(f"📅 Date reçue du téléphone: {date_str}")
         print(f"🚗 Type: {type_transport}")
-        print(f"⏰ Heure: {heure}")
+        print(f"⏰ Heure reçue du téléphone: {heure}")
         print(f"👥 Agents IDs reçus: {agents_ids}")
         print("="*60)
         
@@ -2316,20 +2316,23 @@ def api_creer_course(request):
         if not agents_ids or len(agents_ids) == 0:
             return JsonResponse({'success': False, 'error': 'Aucun agent sélectionné'}, status=400)
         
-        from datetime import datetime
+        from datetime import datetime, timedelta
         from django.utils import timezone
         
-        # 🇫🇷 SOLUTION CRITIQUE : Utiliser l'heure du SERVEUR (pas l'heure du téléphone)
-        # timezone.now() utilise le fuseau horaire configuré dans Django (settings.TIME_ZONE)
-        # Normalement configuré à 'Europe/Paris' pour l'heure française
+        # 🇫🇷 CRUCIAL : Utiliser l'heure du SERVEUR, pas celle du téléphone !
         maintenant = timezone.now()
         
-        heure_actuelle = maintenant.hour
-        date_actuelle = maintenant.date()
+        heure_serveur = maintenant.hour
+        date_serveur = maintenant.date()
         
-        print(f"🇫🇷 HEURE DU SERVEUR (France): {heure_actuelle}h")
-        print(f"🇫🇷 DATE DU SERVEUR: {date_actuelle}")
-        print(f"🕐 Heure complète du serveur: {maintenant.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"🕐 HEURE DU SERVEUR (France): {heure_serveur}h")
+        print(f"📅 DATE DU SERVEUR: {date_serveur}")
+        print(f"⏰ Heure complète: {maintenant.strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # IGNORER complètement l'heure du téléphone !
+        # On utilise UNIQUEMENT l'heure du serveur pour les vérifications
+        heure_actuelle = heure_serveur
+        date_actuelle = date_serveur
         
         try:
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -2338,50 +2341,41 @@ def api_creer_course(request):
         
         heure_int = int(heure)
         
-        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure serveur: {heure_actuelle}h")
-        print(f"📅 Date demandée: {date_obj}, Date serveur: {date_actuelle}")
+        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure SERVEUR: {heure_actuelle}h")
+        print(f"📅 Date demandée: {date_obj}, Date SERVEUR: {date_actuelle}")
         
-        # ✅ Gestion du cycle de travail 6h-4h avec l'heure du serveur
-        date_a_utiliser = date_obj
-        
-        if heure_actuelle >= 6:
-            # On est dans la journée de travail (6h à 23h59)
-            if date_obj != date_actuelle:
-                return JsonResponse({
-                    'success': False,
-                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui (heure du serveur)"
-                }, status=400)
-        else:
-            # On est dans la nuit (00h à 5h) - ça fait partie de la journée d'hier
-            date_hier = date_actuelle - timedelta(days=1)
-            
-            if date_obj == date_actuelle:
-                print(f"🌙 Nuit détectée (actuellement {heure_actuelle}h) - Redirection vers hier ({date_hier})")
-                date_a_utiliser = date_hier
-            elif date_obj == date_hier:
-                print(f"✅ Date demandée correspond à hier ({date_hier}) - OK")
-                date_a_utiliser = date_hier
+        # Si la date envoyée par le téléphone est différente de la date serveur
+        # et que c'est à cause du décalage horaire, on la corrige
+        if date_obj != date_actuelle:
+            # Vérifier si le décalage est dû au fuseau horaire
+            diff_days = (date_actuelle - date_obj).days
+            if abs(diff_days) == 1:
+                print(f"⚠️ Décalage détecté: téléphone dit {date_obj}, serveur dit {date_actuelle}")
+                print(f"   Utilisation de la date du serveur: {date_actuelle}")
+                date_a_utiliser = date_actuelle
             else:
-                return JsonResponse({
-                    'success': False,
-                    'error': f"Entre 00h et 5h (heure serveur), vous ne pouvez créer des courses que pour {date_hier}"
-                }, status=400)
+                date_a_utiliser = date_obj
+        else:
+            date_a_utiliser = date_obj
         
         print(f"📅 Date utilisée pour la création: {date_a_utiliser}")
         
-        # Vérification des heures selon l'heure du serveur
+        # Vérification des heures avec l'heure du serveur UNIQUEMENT
         if heure_actuelle >= 6:
+            # On est dans la journée de travail (6h à 23h59) selon le serveur
             if heure_int > heure_actuelle:
                 print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
                 return JsonResponse({
                     'success': False,
-                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future selon le serveur). Les courses ne peuvent être créées que pour les heures déjà passées."
+                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h. Il est {heure_actuelle}h (heure de Paris)."
                 }, status=400)
             else:
                 print(f"  ✅ Heure {heure_int}h (passée ou actuelle) - autorisée")
         else:
-            print(f"  ✅ Nuit détectée - toutes les heures sont considérées comme passées")
+            # On est dans la nuit (00h à 5h) selon le serveur
+            print(f"  ✅ Nuit détectée (serveur: {heure_actuelle}h) - toutes les heures sont considérées comme passées")
         
+        # Suite de votre code inchangée...
         # Conversion du jour en français
         jours_fr = {
             'Monday': 'Lundi',
@@ -2398,8 +2392,9 @@ def api_creer_course(request):
         
         print(f"📅 Jour: {jour_anglais} -> {jour_francais}")
         
-        # =================================================
+        # ... le reste de votre code reste identique ...
         
+        # Suite du code inchangée à partir d'ici
         from django.apps import apps
         Course = apps.get_model('gestion', 'Course')
         Affectation = apps.get_model('gestion', 'Affectation')
@@ -2620,7 +2615,9 @@ def api_creer_course(request):
                 'notifications_super': super_notifications_crees,
                 'agents_non_trouves': agents_non_trouves,
                 'heure_serveur': heure_actuelle,
-                'date_serveur': date_actuelle.isoformat()
+                'date_serveur': date_actuelle.isoformat(),
+                'heure_telephone_recue': heure_int,
+                'date_telephone_recue': date_str
             }
         }
         
@@ -2645,6 +2642,24 @@ def api_creer_course(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+@csrf_exempt
+@require_GET
+def api_server_time(request):
+    """API pour obtenir l'heure du serveur (heure française)"""
+    from django.utils import timezone
+    now = timezone.now()
+    
+    return JsonResponse({
+        'success': True,
+        'heure': now.hour,
+        'minute': now.minute,
+        'heure_complete': now.strftime('%H:%M:%S'),
+        'date': now.strftime('%Y-%m-%d'),
+        'date_display': now.strftime('%d/%m/%Y'),
+        'timestamp': int(now.timestamp()),
+        'timezone': 'Europe/Paris'
+    })    
 
 @csrf_exempt
 @require_GET

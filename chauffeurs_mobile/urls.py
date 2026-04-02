@@ -56,4 +56,5 @@ urlpatterns = [
     path('api/super/historique/global/', views.api_super_historique_global, name='mobile_api_super_historique_global'),
     path('super/historique/global/', views.mobile_super_historique_view, name='mobile_super_historique'),
     path('api/course/<int:course_id>/agents/', views.api_course_agents, name='api_course_agents'),
+    path('api/server-time/', views.api_server_time, name='api_server_time'),
 ]
