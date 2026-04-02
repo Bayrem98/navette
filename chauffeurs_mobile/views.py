@@ -2316,16 +2316,24 @@ def api_creer_course(request):
         if not agents_ids or len(agents_ids) == 0:
             return JsonResponse({'success': False, 'error': 'Aucun agent sélectionné'}, status=400)
         
-        from datetime import datetime
-        now = datetime.now()
-        # 🇹🇳 MODIFICATION TUNISIE : Ajout de +1 heure pour compenser le décalage horaire
-        # L'application est sur l'heure française (UTC+2), mais la Tunisie est à UTC+1
-        # On ajoute +1 à l'heure actuelle pour avoir l'heure tunisienne
-        heure_actuelle = (now.hour + 1) % 24
-        date_actuelle = now.date()
+        from datetime import datetime, timedelta
         
-        print(f"🇹🇳 Heure actuelle (France): {now.hour}h")
-        print(f"🇹🇳 Heure actuelle (Tunisie): {heure_actuelle}h")
+        # 🇫🇷 FORCER L'HEURE FRANÇAISE (UTC+2)
+        # Option 1: Si le serveur est à l'heure UTC
+        now_utc = datetime.utcnow()
+        now_france = now_utc + timedelta(hours=2)  # UTC+2 pour la France (heure d'été)
+        
+        # Option 2: Alternative si votre serveur est déjà à l'heure française
+        # Dans ce cas, utilisez simplement datetime.now()
+        # now_france = datetime.now()
+        
+        # Utiliser l'heure française pour toutes les vérifications
+        heure_actuelle = now_france.hour
+        date_actuelle = now_france.date()
+        
+        print(f"🇫🇷 Heure actuelle (France - UTC+2): {heure_actuelle}h")
+        print(f"🇫🇷 Date actuelle: {date_actuelle}")
+        print(f"🕐 Heure UTC originale: {now_utc.hour}h")
         
         try:
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -2334,7 +2342,7 @@ def api_creer_course(request):
         
         heure_int = int(heure)
         
-        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle (Tunisie): {heure_actuelle}h")
+        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle (France): {heure_actuelle}h")
         print(f"📅 Date demandée: {date_obj}, Date actuelle: {date_actuelle}")
         
         # ✅ CORRECTION CRITIQUE: Gestion du cycle de travail 6h-4h
@@ -2657,7 +2665,6 @@ def api_creer_course(request):
 @csrf_exempt
 @require_GET
 def api_agents_disponibles(request):
-    """API pour voir les agents disponibles - CORRIGÉ POUR CYCLE 6h-4h"""
     chauffeur_id = request.session.get('chauffeur_id')
     
     if not chauffeur_id:
@@ -2675,14 +2682,19 @@ def api_agents_disponibles(request):
         if not all([date_str, type_transport, heure]):
             return JsonResponse({'success': False, 'error': 'Paramètres manquants'})
         
+        from datetime import datetime, timedelta
+        
+        # 🇫🇷 FORCER L'HEURE FRANÇAISE (UTC+2)
+        now_utc = datetime.utcnow()
+        maintenant = now_utc + timedelta(hours=2)  # UTC+2 pour la France
+        
         date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
-        maintenant = timezone.now()
         maintenant_heure = maintenant.hour
         maintenant_date = maintenant.date()
         heure_int = int(heure)
         
         print(f"🔍 Recherche agents pour: {date_obj} - {type_transport} - {heure_int}h")
-        print(f"🕐 Heure actuelle: {maintenant_heure}h, Date actuelle: {maintenant_date}")
+        print(f"🇫🇷 Heure France: {maintenant_heure}h, Date France: {maintenant_date}")
         
         # ✅ CORRECTION: Gestion du cycle de travail 6h-4h
         # Une journée de travail commence à 6h et se termine à 4h le lendemain

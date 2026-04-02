@@ -29,7 +29,7 @@
                     <td>{{ course.heure }}h</td>
                     <td>{{ course.get_type_transport_display }}</td>
                     <td>{{ course.affectation_set.count }}</td>
-                    <td>{{ course.get_prix_course }} €</td>
+                    <td>{{ course.get_prix_course }} DNT</td>
                     <td>{{ course.demande_validation_at|date:"d/m/Y H:i" }}</td>
                     <td>
                         <form method="post" action="{% url 'valider_course_admin' course.id %}" style="display:inline;">
