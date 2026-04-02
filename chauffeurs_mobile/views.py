@@ -2316,24 +2316,20 @@ def api_creer_course(request):
         if not agents_ids or len(agents_ids) == 0:
             return JsonResponse({'success': False, 'error': 'Aucun agent sélectionné'}, status=400)
         
-        from datetime import datetime, timedelta
+        # 🇫🇷 FORCER L'HEURE FRANÇAISE - Version CORRECTE
+        # NE PAS utiliser datetime.now() car il prend l'heure du serveur
+        # NE PAS utiliser l'heure du client (téléphone)
+        # On force UTC+2 (heure française)
         
-        # 🇫🇷 FORCER L'HEURE FRANÇAISE (UTC+2)
-        # Option 1: Si le serveur est à l'heure UTC
         now_utc = datetime.utcnow()
-        now_france = now_utc + timedelta(hours=2)  # UTC+2 pour la France (heure d'été)
+        now_france = now_utc + timedelta(hours=2)  # France = UTC+2 (heure d'été)
         
-        # Option 2: Alternative si votre serveur est déjà à l'heure française
-        # Dans ce cas, utilisez simplement datetime.now()
-        # now_france = datetime.now()
-        
-        # Utiliser l'heure française pour toutes les vérifications
         heure_actuelle = now_france.hour
         date_actuelle = now_france.date()
         
-        print(f"🇫🇷 Heure actuelle (France - UTC+2): {heure_actuelle}h")
-        print(f"🇫🇷 Date actuelle: {date_actuelle}")
-        print(f"🕐 Heure UTC originale: {now_utc.hour}h")
+        print(f"🇫🇷 HEURE FRANÇAISE FORCÉE: {heure_actuelle}h")
+        print(f"🇫🇷 DATE FRANÇAISE: {date_actuelle}")
+        print(f"🕐 UTC originale: {now_utc.hour}h")
         
         try:
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -2342,11 +2338,10 @@ def api_creer_course(request):
         
         heure_int = int(heure)
         
-        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure actuelle (France): {heure_actuelle}h")
-        print(f"📅 Date demandée: {date_obj}, Date actuelle: {date_actuelle}")
+        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure France: {heure_actuelle}h")
+        print(f"📅 Date demandée: {date_obj}, Date France: {date_actuelle}")
         
-        # ✅ CORRECTION CRITIQUE: Gestion du cycle de travail 6h-4h
-        # Une course à 23h est dans la même journée de travail que les courses de 6h à 23h
+        # ✅ Gestion du cycle de travail 6h-4h avec heure française
         date_a_utiliser = date_obj
         
         if heure_actuelle >= 6:
@@ -2354,14 +2349,13 @@ def api_creer_course(request):
             if date_obj != date_actuelle:
                 return JsonResponse({
                     'success': False,
-                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui (heure française)"
                 }, status=400)
         else:
             # On est dans la nuit (00h à 5h) - ça fait partie de la journée d'hier
             date_hier = date_actuelle - timedelta(days=1)
             
             if date_obj == date_actuelle:
-                # Si l'utilisateur demande aujourd'hui, on le redirige vers hier
                 print(f"🌙 Nuit détectée (actuellement {heure_actuelle}h) - Redirection vers hier ({date_hier})")
                 date_a_utiliser = date_hier
             elif date_obj == date_hier:
@@ -2370,34 +2364,26 @@ def api_creer_course(request):
             else:
                 return JsonResponse({
                     'success': False,
-                    'error': f"Entre 00h et 5h, vous ne pouvez créer des courses que pour {date_hier}"
+                    'error': f"Entre 00h et 5h (heure française), vous ne pouvez créer des courses que pour {date_hier}"
                 }, status=400)
         
         print(f"📅 Date utilisée pour la création: {date_a_utiliser}")
         
-        # ✅ CORRECTION: Vérification des heures selon le cycle de travail
-        # Une course à 23h est considérée comme "passée" mais dans la même journée
-        # Donc on autorise TOUTES les heures de 0h à 23h pour la date correcte
-        # La seule restriction est qu'on ne peut pas créer une course pour une heure FUTURE
-        # qui n'est pas encore arrivée dans la journée de travail actuelle
-        
-        # Déterminer si l'heure demandée est dans la même journée de travail
+        # Vérification des heures selon l'heure française
         if heure_actuelle >= 6:
             # On est dans la journée de travail (6h à 23h59)
-            # On ne peut créer que pour les heures PASSÉES de cette journée
             if heure_int > heure_actuelle:
                 print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
                 return JsonResponse({
                     'success': False,
-                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future). Les courses ne peuvent être créées que pour les heures déjà passées."
+                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future selon l'heure française). Les courses ne peuvent être créées que pour les heures déjà passées."
                 }, status=400)
             else:
                 print(f"  ✅ Heure {heure_int}h (passée ou actuelle) - autorisée")
         else:
-            # On est dans la nuit (00h à 5h)
-            # On travaille pour la journée d'hier, donc toutes les heures de 0h à 23h sont passées
             print(f"  ✅ Nuit détectée - toutes les heures sont considérées comme passées")
         
+        # Suite de votre code (inchangé à partir d'ici)
         # Conversion du jour en français
         jours_fr = {
             'Monday': 'Lundi',
