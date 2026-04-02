@@ -2316,20 +2316,20 @@ def api_creer_course(request):
         if not agents_ids or len(agents_ids) == 0:
             return JsonResponse({'success': False, 'error': 'Aucun agent sélectionné'}, status=400)
         
-        from datetime import datetime, timedelta
+        from datetime import datetime
+        from django.utils import timezone
         
-        # 🇫🇷 FORCER L'HEURE FRANÇAISE (UTC+2)
-        # On prend l'heure UTC et on ajoute 2 heures pour avoir l'heure française
-        now_utc = datetime.utcnow()
-        now_france = now_utc + timedelta(hours=2)  # France = UTC+2 (heure d'été)
+        # 🇫🇷 SOLUTION CRITIQUE : Utiliser l'heure du SERVEUR (pas l'heure du téléphone)
+        # timezone.now() utilise le fuseau horaire configuré dans Django (settings.TIME_ZONE)
+        # Normalement configuré à 'Europe/Paris' pour l'heure française
+        maintenant = timezone.now()
         
-        # Utiliser l'heure française pour toutes les vérifications
-        heure_actuelle = now_france.hour
-        date_actuelle = now_france.date()
+        heure_actuelle = maintenant.hour
+        date_actuelle = maintenant.date()
         
-        print(f"🇫🇷 HEURE FRANÇAISE FORCÉE: {heure_actuelle}h")
-        print(f"🇫🇷 DATE FRANÇAISE: {date_actuelle}")
-        print(f"🕐 Heure UTC originale: {now_utc.hour}h")
+        print(f"🇫🇷 HEURE DU SERVEUR (France): {heure_actuelle}h")
+        print(f"🇫🇷 DATE DU SERVEUR: {date_actuelle}")
+        print(f"🕐 Heure complète du serveur: {maintenant.strftime('%Y-%m-%d %H:%M:%S')}")
         
         try:
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -2338,10 +2338,10 @@ def api_creer_course(request):
         
         heure_int = int(heure)
         
-        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure France: {heure_actuelle}h")
-        print(f"📅 Date demandée: {date_obj}, Date France: {date_actuelle}")
+        print(f"⏰ Vérification: Heure demandée: {heure_int}h, Heure serveur: {heure_actuelle}h")
+        print(f"📅 Date demandée: {date_obj}, Date serveur: {date_actuelle}")
         
-        # ✅ CORRECTION CRITIQUE: Gestion du cycle de travail 6h-4h
+        # ✅ Gestion du cycle de travail 6h-4h avec l'heure du serveur
         date_a_utiliser = date_obj
         
         if heure_actuelle >= 6:
@@ -2349,7 +2349,7 @@ def api_creer_course(request):
             if date_obj != date_actuelle:
                 return JsonResponse({
                     'success': False,
-                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui (heure française)"
+                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui (heure du serveur)"
                 }, status=400)
         else:
             # On est dans la nuit (00h à 5h) - ça fait partie de la journée d'hier
@@ -2364,18 +2364,18 @@ def api_creer_course(request):
             else:
                 return JsonResponse({
                     'success': False,
-                    'error': f"Entre 00h et 5h (heure française), vous ne pouvez créer des courses que pour {date_hier}"
+                    'error': f"Entre 00h et 5h (heure serveur), vous ne pouvez créer des courses que pour {date_hier}"
                 }, status=400)
         
         print(f"📅 Date utilisée pour la création: {date_a_utiliser}")
         
-        # Vérification des heures selon l'heure française
+        # Vérification des heures selon l'heure du serveur
         if heure_actuelle >= 6:
             if heure_int > heure_actuelle:
                 print(f"  ❌ Heure future {heure_int}h > {heure_actuelle}h - INTERDITE")
                 return JsonResponse({
                     'success': False,
-                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future selon l'heure française). Les courses ne peuvent être créées que pour les heures déjà passées."
+                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future selon le serveur). Les courses ne peuvent être créées que pour les heures déjà passées."
                 }, status=400)
             else:
                 print(f"  ✅ Heure {heure_int}h (passée ou actuelle) - autorisée")
@@ -2619,8 +2619,8 @@ def api_creer_course(request):
                 'notifications_admin': notifications_crees,
                 'notifications_super': super_notifications_crees,
                 'agents_non_trouves': agents_non_trouves,
-                'heure_france': heure_actuelle,
-                'heure_utc': now_utc.hour
+                'heure_serveur': heure_actuelle,
+                'date_serveur': date_actuelle.isoformat()
             }
         }
         
