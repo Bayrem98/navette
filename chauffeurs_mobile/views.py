@@ -2279,6 +2279,8 @@ def api_annuler_course(request):
 
 # API pour créer une course
 
+# API pour créer une course
+
 @csrf_exempt
 @require_POST
 def api_creer_course(request):
@@ -2292,14 +2294,14 @@ def api_creer_course(request):
         
         date_str = data.get('date')
         type_transport = data.get('type_transport')
-        heure = data.get('heure')  # Heure envoyée par le téléphone (heure tunisienne)
+        heure = data.get('heure')
         agents_ids = data.get('agents', [])
         
         print("="*60)
         print(f"📝 CRÉATION COURSE")
-        print(f"📅 Date reçue du téléphone: {date_str}")
+        print(f"📅 Date reçue: {date_str}")
         print(f"🚗 Type: {type_transport}")
-        print(f"⏰ Heure reçue du téléphone (Tunisie): {heure}")
+        print(f"⏰ Heure: {heure}")
         print(f"👥 Agents IDs reçus: {agents_ids}")
         print("="*60)
         
@@ -2319,47 +2321,70 @@ def api_creer_course(request):
         from datetime import datetime, timedelta
         from django.utils import timezone
         
-        # 🇫🇷 HEURE DU SERVEUR (France - UTC+2)
-        maintenant_serveur = timezone.now()
-        heure_france_actuelle = maintenant_serveur.hour
-        date_france_actuelle = maintenant_serveur.date()
+        # 🇫🇷 HEURE DU SERVEUR (France)
+        maintenant = timezone.now()
         
-        # 🇹🇳 CONVERSION : L'heure envoyée par le téléphone (Tunisie UTC+1)
-        # On ajoute +1 pour obtenir l'heure française (UTC+2)
-        heure_tunisienne_recue = int(heure)
-        heure_france_corrigee = (heure_tunisienne_recue + 1) % 24
+        # Heure actuelle française (sans modification)
+        heure_actuelle_france = maintenant.hour
+        date_actuelle = maintenant.date()
         
-        # La date reste la même (ne pas changer le jour)
+        # 🇹🇳 POUR L'AFFICHAGE UNIQUEMENT : Ajouter +1 pour l'heure tunisienne
+        heure_actuelle_tunisie = (heure_actuelle_france + 1) % 24
+        
+        print(f"🇫🇷 Heure actuelle (France): {heure_actuelle_france}h")
+        print(f"🇹🇳 Heure actuelle (Tunisie - affichage): {heure_actuelle_tunisie}h")
+        print(f"📅 Date actuelle: {date_actuelle}")
+        
         try:
-            date_demandee = datetime.strptime(date_str, '%Y-%m-%d').date()
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
             return JsonResponse({'success': False, 'error': 'Format de date invalide'}, status=400)
         
-        # La date utilisée est la même que celle envoyée par le téléphone
-        date_a_utiliser = date_demandee
+        heure_int = int(heure)
         
-        print(f"🟢 HEURE DU SERVEUR (France actuelle): {heure_france_actuelle}h")
-        print(f"📱 Heure reçue du téléphone (Tunisie): {heure_tunisienne_recue}h")
-        print(f"🔄 Heure convertie en heure française: {heure_france_corrigee}h (même date)")
-        print(f"📅 Date utilisée (inchangée): {date_a_utiliser}")
+        print(f"⏰ Vérification: Heure demandée: {heure_int}h")
+        print(f"📅 Date demandée: {date_obj}")
         
-        # Vérification : comparer l'heure française convertie avec l'heure française actuelle
-        if heure_france_actuelle >= 6:
-            # Journée normale (6h-23h59)
-            if heure_france_corrigee > heure_france_actuelle and date_a_utiliser == date_france_actuelle:
-                print(f"  ❌ Heure future {heure_france_corrigee}h (française) > {heure_france_actuelle}h - INTERDITE")
+        # ✅ Gestion du cycle de travail 6h-4h
+        date_a_utiliser = date_obj
+        
+        if heure_actuelle_france >= 6:
+            # On est dans la journée de travail (6h à 23h59)
+            if date_obj != date_actuelle:
                 return JsonResponse({
                     'success': False,
-                    'error': f"Vous ne pouvez pas créer une course pour {heure}h (heure tunisienne). Cela correspond à {heure_france_corrigee}h (heure de Paris) et il est actuellement {heure_france_actuelle}h."
+                    'error': "Vous ne pouvez créer des courses que pour aujourd'hui"
+                }, status=400)
+        else:
+            # On est dans la nuit (00h à 5h) - ça fait partie de la journée d'hier
+            date_hier = date_actuelle - timedelta(days=1)
+            
+            if date_obj == date_actuelle:
+                print(f"🌙 Nuit détectée (actuellement {heure_actuelle_france}h) - Redirection vers hier ({date_hier})")
+                date_a_utiliser = date_hier
+            elif date_obj == date_hier:
+                print(f"✅ Date demandée correspond à hier ({date_hier}) - OK")
+                date_a_utiliser = date_hier
+            else:
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Entre 00h et 5h, vous ne pouvez créer des courses que pour {date_hier}"
+                }, status=400)
+        
+        print(f"📅 Date utilisée pour la création: {date_a_utiliser}")
+        
+        # ✅ Vérification des heures (avec l'heure française)
+        if heure_actuelle_france >= 6:
+            if heure_int > heure_actuelle_france:
+                print(f"  ❌ Heure future {heure_int}h > {heure_actuelle_france}h - INTERDITE")
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Vous ne pouvez pas créer une course pour {heure_int}h (heure future). Les courses ne peuvent être créées que pour les heures déjà passées."
                 }, status=400)
             else:
-                print(f"  ✅ Heure {heure}h (tunisienne) = {heure_france_corrigee}h (française) - autorisée")
+                print(f"  ✅ Heure {heure_int}h (passée ou actuelle) - autorisée")
         else:
-            # Nuit (00h-5h)
-            print(f"  ✅ Nuit détectée (serveur: {heure_france_actuelle}h) - autorisation spéciale")
-        
-        print(f"📅 Date finale utilisée pour la création: {date_a_utiliser}")
-        print(f"⏰ Heure finale utilisée pour la création (française): {heure_france_corrigee}h")
+            print(f"  ✅ Nuit détectée - toutes les heures sont considérées comme passées")
         
         # Conversion du jour en français
         jours_fr = {
@@ -2392,7 +2417,7 @@ def api_creer_course(request):
             chauffeur=chauffeur,
             date_reelle=date_a_utiliser,
             type_transport=type_transport,
-            heure=heure_france_corrigee  # On utilise l'heure française convertie
+            heure=heure_int
         ).first()
         
         if course_existante:
@@ -2419,7 +2444,7 @@ def api_creer_course(request):
                 chauffeur=chauffeur,
                 date_reelle=date_a_utiliser,
                 type_transport=type_transport,
-                heure=heure_france_corrigee,  # On utilise l'heure française convertie
+                heure=heure_int,
                 jour=jour_francais,
                 statut='en_attente'
             )
@@ -2459,9 +2484,9 @@ def api_creer_course(request):
                                 'heure_ete': False,
                                 'filtre_agents': 'tous'
                             }
-                            self.data = {'heure_specifique': str(heure_france_corrigee)}
+                            self.data = {'heure_specifique': str(heure_int)}
                     
-                    form_filtre = FiltreFormPlanning(jour_correspondant, type_transport, heure_france_corrigee)
+                    form_filtre = FiltreFormPlanning(jour_correspondant, type_transport, heure_int)
                     liste_transports = gestionnaire.traiter_donnees(form_filtre)
                     
                     agents_programmes = [t['agent'].strip().lower() for t in liste_transports]
@@ -2490,7 +2515,7 @@ def api_creer_course(request):
                 existe_deja = Affectation.objects.filter(
                     agent=agent,
                     date_reelle=date_a_utiliser,
-                    heure=heure_france_corrigee
+                    heure=heure_int
                 ).exists()
                 
                 if not existe_deja:
@@ -2499,7 +2524,7 @@ def api_creer_course(request):
                         chauffeur=chauffeur,
                         agent=agent,
                         type_transport=type_transport,
-                        heure=heure_france_corrigee,
+                        heure=heure_int,
                         jour=jour_francais,
                         date_reelle=date_a_utiliser,
                         prix_course=course.get_prix_course() if hasattr(course, 'get_prix_course') else 0
@@ -2565,7 +2590,7 @@ def api_creer_course(request):
                             except Exception as e:
                                 print(f"  ❌ Erreur création notification super: {e}")
                 else:
-                    print(f"⚠️ Agent {agent.nom} déjà affecté à {heure_france_corrigee}h")
+                    print(f"⚠️ Agent {agent.nom} déjà affecté à {heure_int}h")
                     
             except Agent.DoesNotExist:
                 print(f"❌ Agent ID {agent_id} non trouvé")
@@ -2590,8 +2615,8 @@ def api_creer_course(request):
             'date_utilisee': date_a_utiliser.isoformat(),
             'jour_francais': jour_francais,
             'date_originale': date_str,
-            'heure_tunisienne_originale': heure_tunisienne_recue,
-            'heure_francaise_convertie': heure_france_corrigee,
+            'nuit_mode': heure_actuelle_france < 6,
+            'heure_actuelle_affichage': heure_actuelle_tunisie,  # Pour l'affichage seulement
             'debug': {
                 'planning_charge': planning_charge,
                 'agents_programmes_count': len(agents_programmes),
@@ -2599,10 +2624,8 @@ def api_creer_course(request):
                 'notifications_admin': notifications_crees,
                 'notifications_super': super_notifications_crees,
                 'agents_non_trouves': agents_non_trouves,
-                'heure_serveur_france': heure_france_actuelle,
-                'heure_telephone_tunisie': heure_tunisienne_recue,
-                'heure_convertie_france': heure_france_corrigee,
-                'date_conservee': date_a_utiliser.isoformat()
+                'heure_france_reelle': heure_actuelle_france,
+                'heure_tunisie_affichage': heure_actuelle_tunisie
             }
         }
         
@@ -2615,7 +2638,8 @@ def api_creer_course(request):
         print("="*60)
         print(f"✅ Course créée avec {len(agents_affectes)} agents")
         print(f"📅 Jour enregistré: {jour_francais}")
-        print(f"🔄 Conversion: {heure_tunisienne_recue}h (Tunisie) -> {heure_france_corrigee}h (France) - Même date")
+        print(f"🕐 Heure France réelle: {heure_actuelle_france}h")
+        print(f"🕐 Heure Tunisie affichage: {heure_actuelle_tunisie}h")
         print("="*60)
         
         return JsonResponse(response_data)
