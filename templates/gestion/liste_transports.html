@@ -1,0 +1,1066 @@
+{% extends 'gestion/base.html' %}
+{% load custom_filters %}
+
+{% block page_title %}Liste des Transports{% endblock %}
+
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+// ========== FONCTION D'IMPRESSION GLOBALE ==========
+function imprimerListeFiltree() {
+    console.log('Fonction imprimerListeFiltree appelée');
+    
+    // Récupérer les filtres actuels
+    const urlParams = new URLSearchParams(window.location.search);
+    const jour = urlParams.get('jour') || 'Tous';
+    const typeTransport = urlParams.get('type_transport') || 'tous';
+    const heureSpecifique = urlParams.get('heure_specifique');
+    const heureEte = urlParams.has('heure_ete');
+    const filtreAgents = urlParams.get('filtre_agents') || 'tous';
+    
+    // Créer le contenu HTML pour l'impression
+    let html = `
+        <div class="header-print">
+            <h2>LISTE DES TRANSPORTS</h2>
+            <h4>Système de Gestion Transport</h4>
+            <p>Généré le : ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})}</p>
+            <p><strong>Filtres appliqués :</strong> ${genererTexteFiltres(jour, typeTransport, heureSpecifique, heureEte, filtreAgents)}</p>
+        </div>
+    `;
+    
+    // Parcourir les jours affichés à l'écran
+    document.querySelectorAll('.card.mb-4').forEach((cardJour, indexJour) => {
+        const titreJour = cardJour.querySelector('.card-header h6')?.textContent || `Jour ${indexJour + 1}`;
+        
+        html += `<div class="${indexJour > 0 ? 'page-break' : ''}">`;
+        html += `<h3 style="margin-top: 20px;">${titreJour}</h3>`;
+        
+        // Ramassages pour ce jour
+        const tablesRamassage = cardJour.querySelectorAll('h6.text-success + .table-responsive table');
+        tablesRamassage.forEach(table => {
+            html += `<h4 style="color: #28a745; margin-top: 15px;">RAMASSAGES</h4>`;
+            html += convertirTableauPourImpression(table);
+        });
+        
+        // Départs pour ce jour
+        const tablesDepart = cardJour.querySelectorAll('h6.text-warning + .table-responsive table');
+        tablesDepart.forEach(table => {
+            html += `<h4 style="color: #ffc107; margin-top: 20px;">DÉPARTS</h4>`;
+            html += convertirTableauPourImpression(table);
+        });
+        
+        html += `</div>`;
+    });
+    
+    // Si aucun filtre n'est appliqué et aucun contenu n'est trouvé
+    if (!document.querySelector('.card.mb-4')) {
+        const message = document.querySelector('.text-center.py-4')?.innerHTML || 
+                       'Aucun transport trouvé avec les filtres actuels';
+        html += `<div style="text-align: center; padding: 40px;">${message}</div>`;
+    }
+    
+    // Insérer dans le div caché
+    const divImpression = document.getElementById('contenu-impression');
+    if (divImpression) {
+        divImpression.innerHTML = html;
+    }
+    
+    // Afficher une alerte
+    const toast = document.createElement('div');
+    toast.className = 'position-fixed top-0 end-0 p-3';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <div class="toast show" role="alert">
+            <div class="toast-header bg-primary text-white">
+                <i class="fas fa-print me-2"></i>
+                <strong class="me-auto">Impression</strong>
+                <button type="button" class="btn-close btn-close-white" onclick="this.parentElement.parentElement.remove()"></button>
+            </div>
+            <div class="toast-body">
+                Préparation de l'impression...<br>
+                <small>Le contenu filtré sera imprimé.</small>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    
+    // Attendre un peu puis lancer l'impression
+    setTimeout(() => {
+        // Masquer le toast
+        toast.remove();
+        
+        // Ouvrir la fenêtre d'impression
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="fr">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Liste des Transports - Impression</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 20px;
+                        color: #333;
+                    }
+                    @media print {
+                        @page {
+                            margin: 0.5cm;
+                            size: A4 portrait;
+                        }
+                        body {
+                            margin: 1cm;
+                        }
+                        .page-break {
+                            page-break-before: always;
+                        }
+                    }
+                    .header-print {
+                        text-align: center;
+                        margin-bottom: 30px;
+                        padding-bottom: 20px;
+                        border-bottom: 3px solid #2c3e50;
+                    }
+                    .header-print h2 {
+                        color: #2c3e50;
+                        margin-bottom: 10px;
+                    }
+                    .header-print h4 {
+                        color: #7f8c8d;
+                        margin-bottom: 15px;
+                    }
+                    .header-print p {
+                        margin: 5px 0;
+                        font-size: 14px;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 15px 0;
+                        font-size: 12px;
+                    }
+                    table th {
+                        background-color: #f5f5f5;
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                        font-weight: bold;
+                        text-align: left;
+                    }
+                    table td {
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                    }
+                    .badge-print {
+                        display: inline-block;
+                        padding: 3px 8px;
+                        border-radius: 3px;
+                        font-size: 11px;
+                        font-weight: bold;
+                        margin: 2px;
+                    }
+                    .badge-ramassage {
+                        background-color: #28a745;
+                        color: white;
+                    }
+                    .badge-depart {
+                        background-color: #ffc107;
+                        color: #000;
+                    }
+                    .badge-info {
+                        background-color: #17a2b8;
+                        color: white;
+                    }
+                    .badge-danger {
+                        background-color: #dc3545;
+                        color: white;
+                    }
+                    .page-break {
+                        page-break-before: always;
+                    }
+                    .footer {
+                        text-align: center;
+                        margin-top: 30px;
+                        padding-top: 10px;
+                        border-top: 1px solid #ddd;
+                        font-size: 10px;
+                        color: #7f8c8d;
+                    }
+                </style>
+            </head>
+            <body>
+                ${html}
+                <div class="footer">
+                    Document généré par le Système de Gestion Transport | Page 1/1
+                </div>
+                <script>
+                    window.onload = function() {
+                        setTimeout(function() {
+                            window.print();
+                            setTimeout(function() {
+                                window.close();
+                            }, 500);
+                        }, 1000);
+                    };
+                <\/script>
+            </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        
+    }, 1000);
+}
+
+// Fonction pour générer le texte des filtres
+function genererTexteFiltres(jour, typeTransport, heureSpecifique, heureEte, filtreAgents) {
+    let texte = '';
+    const filtres = [];
+    
+    if (jour !== 'Tous') filtres.push(`Jour: ${jour}`);
+    if (typeTransport !== 'tous') filtres.push(`Type: ${typeTransport === 'ramassage' ? 'Ramassage' : 'Départ'}`);
+    if (heureSpecifique) filtres.push(`Heure: ${heureSpecifique}h`);
+    if (heureEte) filtres.push("Heure d'été");
+    if (filtreAgents !== 'tous') filtres.push(`Agents: ${filtreAgents === 'complets' ? 'Complets' : 'Incomplets'}`);
+    
+    texte = filtres.length > 0 ? filtres.join(' | ') : 'Tous les transports';
+    return texte;
+}
+
+// Fonction pour convertir un tableau HTML en HTML d'impression (sans statut et actions)
+function convertirTableauPourImpression(tableHTML) {
+    let html = '<table>';
+    
+    // En-têtes (sans Statut et Actions)
+    html += '<thead><tr>';
+    const headers = ['Agent', 'Heure', 'Adresse', 'Téléphone', 'Société'];
+    headers.forEach(header => {
+        html += `<th>${header}</th>`;
+    });
+    html += '</tr></thead>';
+    
+    // Corps
+    html += '<tbody>';
+    tableHTML.querySelectorAll('tbody tr').forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        
+        // Sauter les colonnes Statut et Actions (les 2 dernières)
+        if (tds.length >= 2) {
+            html += '<tr>';
+            
+            // Colonne 1: Agent
+            let agentContent = tds[0].innerHTML;
+            agentContent = agentContent.replace(/<br>/g, ' ');
+            agentContent = agentContent.replace(/<small[^>]*>.*?<\/small>/g, '');
+            agentContent = agentContent.replace(/<button[^>]*>.*?<\/button>/g, '');
+            agentContent = agentContent.replace(/<a[^>]*>.*?<\/a>/g, '');
+            agentContent = agentContent.replace(/<strong>/g, '').replace(/<\/strong>/g, '');
+            agentContent = agentContent.trim();
+            html += `<td>${agentContent}</td>`;
+            
+            // Colonne 2: Heure
+            let heureContent = tds[1].innerHTML;
+            heureContent = heureContent.replace(/<span class="badge[^"]*">([^<]+)<\/span>/g, '$1');
+            heureContent = heureContent.replace(/<br>/g, ' ');
+            heureContent = heureContent.replace(/<small[^>]*>.*?<\/small>/g, '');
+            html += `<td>${heureContent.trim()}</td>`;
+            
+            // Colonne 3: Adresse
+            let adresseContent = tds[2].innerHTML;
+            adresseContent = adresseContent.replace(/<span[^>]*>.*?<\/span>/g, '');
+            adresseContent = adresseContent.replace(/<i[^>]*>.*?<\/i>/g, '');
+            adresseContent = adresseContent.trim();
+            html += `<td>${adresseContent}</td>`;
+            
+            // Colonne 4: Téléphone
+            let telephoneContent = tds[3].innerHTML;
+            telephoneContent = telephoneContent.replace(/<span[^>]*>.*?<\/span>/g, '');
+            telephoneContent = telephoneContent.replace(/<i[^>]*>.*?<\/i>/g, '');
+            telephoneContent = telephoneContent.trim();
+            html += `<td>${telephoneContent}</td>`;
+            
+            // Colonne 5: Société
+            let societeContent = tds[4].innerHTML;
+            societeContent = societeContent.replace(/<span class="badge bg-info[^"]*">([^<]+)<\/span>/g, '$1');
+            societeContent = societeContent.replace(/<br>/g, ' ');
+            societeContent = societeContent.replace(/<small[^>]*>.*?<\/small>/g, '');
+            html += `<td>${societeContent.trim()}</td>`;
+            
+            html += '</tr>';
+        }
+    });
+    html += '</tbody></table>';
+    
+    return html;
+}
+
+// Exposer la fonction globalement
+window.imprimerListeFiltree = imprimerListeFiltree;
+
+document.addEventListener('DOMContentLoaded', function() {
+    const typeTransportSelect = document.getElementById('id_type_transport');
+    const heuresRamassageContainer = document.getElementById('heures-ramassage-container');
+    const heuresDepartContainer = document.getElementById('heures-depart-container');
+    
+    function afficherHeuresParType() {
+        const typeSelectionne = typeTransportSelect.value;
+        
+        // Masquer toutes les sections d'heures d'abord
+        heuresRamassageContainer.style.display = 'none';
+        heuresDepartContainer.style.display = 'none';
+        
+        // Afficher les sections selon le type sélectionné
+        if (typeSelectionne === 'tous' || typeSelectionne === 'ramassage') {
+            heuresRamassageContainer.style.display = 'block';
+        }
+        
+        if (typeSelectionne === 'tous' || typeTransportSelect.value === 'depart') {
+            heuresDepartContainer.style.display = 'block';
+        }
+    }
+    
+    // Événement de changement sur le select
+    if (typeTransportSelect) {
+        typeTransportSelect.addEventListener('change', afficherHeuresParType);
+        
+        // Afficher les heures au chargement initial
+        afficherHeuresParType();
+    }
+    
+    // Fonction pour ouvrir le modal de modification d'agent
+    function ouvrirModalAgent(nom, adresse, telephone, societe, id) {
+        console.log('Ouvrir modal agent:', nom, id);
+        
+        document.getElementById('modal-agent-nom').textContent = nom;
+        document.getElementById('agent-id').value = id || '';
+        document.getElementById('agent-nom').value = nom;
+        document.getElementById('agent-adresse').value = adresse || '';
+        document.getElementById('agent-telephone').value = telephone || '';
+        document.getElementById('agent-societe-texte').value = societe || '';
+        
+        // Charger les sociétés existantes
+        chargerSocietes();
+        
+        const modal = new bootstrap.Modal(document.getElementById('modal-modifier-agent'));
+        modal.show();
+    }
+    
+    // Fonction pour charger les sociétés dans le select
+    function chargerSocietes() {
+        fetch('/societes/api/liste/')
+            .then(response => response.json())
+            .then(data => {
+                const select = document.getElementById('agent-societe-select');
+                select.innerHTML = '<option value="">Sélectionner une société</option>';
+                
+                data.forEach(societe => {
+                    const option = document.createElement('option');
+                    option.value = societe.id;
+                    option.textContent = societe.nom;
+                    select.appendChild(option);
+                });
+                
+                // Si une société existe déjà, la présélectionner
+                const societeTexte = document.getElementById('agent-societe-texte').value;
+                if (societeTexte) {
+                    const options = select.options;
+                    for (let i = 0; i < options.length; i++) {
+                        if (options[i].text === societeTexte) {
+                            select.value = options[i].value;
+                            document.getElementById('agent-societe-texte').disabled = true;
+                            break;
+                        }
+                    }
+                }
+            })
+            .catch(error => console.error('Erreur:', error));
+    }
+    
+    // Gérer le changement entre sélection et texte libre
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.id === 'agent-societe-select') {
+            const texteInput = document.getElementById('agent-societe-texte');
+            if (e.target.value) {
+                texteInput.disabled = true;
+                texteInput.value = '';
+            } else {
+                texteInput.disabled = false;
+            }
+        }
+    });
+    
+    // Soumission du formulaire de modification
+    document.getElementById('form-modifier-agent')?.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        fetch('/agents/api/modifier/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Agent modifié avec succès!');
+                location.reload(); // Recharger la page pour voir les changements
+            } else {
+                alert('Erreur: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('Une erreur est survenue');
+        });
+    });
+    
+    // Exposer la fonction globalement pour les liens
+    window.ouvrirModalAgent = ouvrirModalAgent;
+    
+    // Fonctions pour gérer la sélection multiple d'heures
+    window.selectionnerSeulement = function(type, heure) {
+        const form = document.querySelector('form[method="get"]');
+        
+        // Décocher toutes les heures
+        const allCheckboxes = form.querySelectorAll('input[name^="ramassage_"], input[name^="depart_"]');
+        allCheckboxes.forEach(cb => cb.checked = false);
+        
+        // Cocher seulement l'heure sélectionnée
+        const heureCheckbox = form.querySelector(`input[name="${type}_${heure}h"]`);
+        if (heureCheckbox) {
+            heureCheckbox.checked = true;
+        }
+        
+        // Supprimer l'ancien filtre heure_specifique s'il existe
+        const oldInputs = form.querySelectorAll('input[name="heure_specifique"]');
+        oldInputs.forEach(input => input.remove());
+        
+        // Ajouter le nouveau filtre heure spécifique
+        const inputHeure = document.createElement('input');
+        inputHeure.type = 'hidden';
+        inputHeure.name = 'heure_specifique';
+        inputHeure.value = heure;
+        form.appendChild(inputHeure);
+        
+        // Soumettre le formulaire
+        form.submit();
+    };
+    
+    window.selectionnerHeure = function(type, heure) {
+        const form = document.querySelector('form[method="get"]');
+        
+        // Cocher l'heure sélectionnée
+        const heureCheckbox = form.querySelector(`input[name="${type}_${heure}h"]`);
+        if (heureCheckbox) {
+            heureCheckbox.checked = true;
+        }
+        
+        // Supprimer le filtre heure_specifique s'il existe
+        const oldInputs = form.querySelectorAll('input[name="heure_specifique"]');
+        oldInputs.forEach(input => input.remove());
+        
+        // Soumettre le formulaire
+        form.submit();
+    };
+    
+    window.toggleToutesHeures = function(type) {
+        const form = document.querySelector('form[method="get"]');
+        const checkboxes = form.querySelectorAll(`input[name^="${type}_"]`);
+        
+        // Vérifier si toutes sont cochées
+        const toutesCochees = Array.from(checkboxes).every(cb => cb.checked);
+        
+        // Basculer l'état
+        checkboxes.forEach(cb => cb.checked = !toutesCochees);
+        
+        // Supprimer le filtre heure_specifique s'il existe
+        const oldInputs = form.querySelectorAll('input[name="heure_specifique"]');
+        oldInputs.forEach(input => input.remove());
+        
+        // Soumettre le formulaire
+        form.submit();
+    };
+
+    // Optionnel : Ajouter des raccourcis clavier
+    document.addEventListener('keydown', function(e) {
+        // Ctrl+P pour imprimer
+        if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+            e.preventDefault();
+            imprimerListeFiltree();
+        }
+    });
+});
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0"><i class="fas fa-list"></i> Liste des Transports</h5>
+                <div>
+                    <a href="{% url 'upload' %}" class="btn btn-light btn-sm me-2">
+                        <i class="fas fa-upload"></i> Charger Planning
+                    </a>
+                    <!-- BOUTON IMPRIMER DIRECT - CORRIGÉ -->
+                    <button onclick="imprimerListeFiltree()" class="btn btn-warning btn-sm me-2">
+                        <i class="fas fa-print"></i> Imprimer
+                    </button>
+                    <!-- BOUTON PDF -->
+                    <a href="{% url 'generer_pdf' %}?{{ request.GET.urlencode }}" class="btn btn-success btn-sm">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Formulaire de filtrage -->
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <form method="get" class="row g-3">
+                            <div class="col-md-2">
+                                <label class="form-label">Jour</label>
+                                {{ form.jour }}
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Type Transport</label>
+                                {{ form.type_transport }}
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Filtre Agents</label>
+                                {{ form.filtre_agents }}
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Heure été</label>
+                                <div class="form-check mt-2">
+                                    {{ form.heure_ete }}
+                                    <label class="form-check-label" for="{{ form.heure_ete.id_for_label }}">
+                                        Activer heure été
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Actions</label>
+                                <div>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-filter"></i> Filtrer
+                                    </button>
+                                    <a href="{% url 'liste_transports' %}" class="btn btn-secondary">
+                                        <i class="fas fa-refresh"></i> Réinitialiser
+                                    </a>
+                                </div>
+                            </div>
+                            
+                            <!-- Boutons pour sélectionner/désélectionner toutes les heures -->
+                            <div class="row mb-2">
+                                <div class="col-md-12">
+                                    <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                onclick="toggleToutesHeures('ramassage')">
+                                            <i class="fas fa-check-square"></i> Tout cocher/décocher ramassages
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-warning" 
+                                                onclick="toggleToutesHeures('depart')">
+                                            <i class="fas fa-check-square"></i> Tout cocher/décocher départs
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Heures de ramassage (affichage dynamique) -->
+                            <div id="heures-ramassage-container" class="heures-container col-md-12">
+                                <label class="form-label fw-bold">Heures de ramassage</label>
+                                <div class="row">
+                                    {% for heure, libelle in heures_ramassage_config %}
+                                    <div class="col-6 col-md-3">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <div class="form-check me-2">
+                                                <input class="form-check-input" type="checkbox" 
+                                                       name="ramassage_{{ heure }}h" 
+                                                       id="ramassage_{{ heure }}h" 
+                                                       value="true" 
+                                                       {% if request.GET|get_item:"ramassage_"|add:heure|add:"h" == "true" %}checked{% endif %}>
+                                            </div>
+                                            <label class="form-check-label" for="ramassage_{{ heure }}h">
+                                                {{ libelle }}
+                                            </label>
+                                            <div class="btn-group btn-group-sm ms-2">
+                                                <button type="button" 
+                                                        class="btn btn-outline-primary" 
+                                                        onclick="selectionnerSeulement('ramassage', {{ heure }})"
+                                                        title="Voir seulement cette heure">
+                                                    <i class="fas fa-filter"></i>
+                                                </button>
+                                                <button type="button" 
+                                                        class="btn btn-outline-secondary" 
+                                                        onclick="selectionnerHeure('ramassage', {{ heure }})"
+                                                        title="Inclure cette heure">
+                                                    <i class="fas fa-plus"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            
+                            <!-- Heures de départ (affichage dynamique) -->
+                            <div id="heures-depart-container" class="heures-container col-md-12">
+                                <label class="form-label fw-bold">Heures de départ</label>
+                                <div class="row">
+                                    {% for heure, libelle in heures_depart_config %}
+                                    <div class="col-6 col-md-3">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <div class="form-check me-2">
+                                                <input class="form-check-input" type="checkbox" 
+                                                       name="depart_{{ heure }}h" 
+                                                       id="depart_{{ heure }}h" 
+                                                       value="true" 
+                                                       {% if request.GET|get_item:"depart_"|add:heure|add:"h" == "true" %}checked{% endif %}>
+                                            </div>
+                                            <label class="form-check-label" for="depart_{{ heure }}h">
+                                                {{ libelle }}
+                                            </label>
+                                            <div class="btn-group btn-group-sm ms-2">
+                                                <button type="button" 
+                                                        class="btn btn-outline-warning" 
+                                                        onclick="selectionnerSeulement('depart', {{ heure }})"
+                                                        title="Voir seulement cette heure">
+                                                    <i class="fas fa-filter"></i>
+                                                </button>
+                                                <button type="button" 
+                                                        class="btn btn-outline-secondary" 
+                                                        onclick="selectionnerHeure('depart', {{ heure }})"
+                                                        title="Inclure cette heure">
+                                                    <i class="fas fa-plus"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            
+                            <!-- Champ caché pour l'heure spécifique -->
+                            {% if request.GET.heure_specifique %}
+                            <input type="hidden" name="heure_specifique" value="{{ request.GET.heure_specifique }}">
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Statistiques -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-0">{{ ramassages|length }} Ramassages</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-dark">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-0">{{ departs|length }} Départs</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-0">{{ liste_transports|length }} Total</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card {% if agents_incomplets > 0 %}bg-danger{% else %}bg-secondary{% endif %} text-white">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-0">{{ agents_incomplets }} Incomplets</h6>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Avertissement si filtre par heure -->
+                {% if request.GET.heure_specifique %}
+                <div class="alert alert-info mb-4">
+                    <i class="fas fa-filter"></i>
+                    <strong>Filtre actif :</strong> Affichage uniquement des transports à {{ request.GET.heure_specifique }}h
+                    <a href="{% url 'liste_transports' %}?{{ request.GET.urlencode|cut:'&heure_specifique='|cut:'heure_specifique=' }}" 
+                       class="btn btn-sm btn-outline-info ms-3">
+                        <i class="fas fa-times"></i> Supprimer le filtre
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- Liste des transports groupés par jour -->
+                {% if liste_transports %}
+                    {% regroup liste_transports by jour as jours_list %}
+                    
+                    {% for jour in jours_list %}
+                    <div class="card mb-4">
+                        <div class="card-header bg-secondary text-white">
+                            <h6 class="card-title mb-0">
+                                {{ jour.grouper }} - 
+                                {% for date_jour, date_reelle in dates_par_jour.items %}
+                                    {% if date_jour == jour.grouper %}
+                                        {{ date_reelle }}
+                                    {% endif %}
+                                {% endfor %}
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <!-- Ramassages pour ce jour -->
+                            {% if form.type_transport.value == 'ramassage' or form.type_transport.value == 'tous' %}
+                            <div class="mb-4">
+                                <h6 class="text-success"><i class="fas fa-bus"></i> Ramassages</h6>
+                                {% with ramassages_jour=jour.list|select_type:"ramassage" %}
+                                    {% if ramassages_jour %}
+                                    <div class="table-responsive">
+                                        <table class="table table-striped table-hover">
+                                            <thead class="table-success">
+                                                <tr>
+                                                    <th>Agent</th>
+                                                    <th>Heure</th>
+                                                    <th>Adresse</th>
+                                                    <th>Téléphone</th>
+                                                    <th>Société</th>
+                                                    <th>Statut</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for transport in ramassages_jour %}
+                                                <tr>
+                                                    <td>
+                                                        <strong>{{ transport.agent }}</strong>
+                                                        {% if not transport.est_complet %}
+                                                        <br>
+                                                        <small class="text-danger">
+                                                            <i class="fas fa-exclamation-triangle"></i>
+                                                            Informations incomplètes
+                                                        </small>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-success">{{ transport.heure_affichage }}</span>
+                                                        <br>
+                                                        <small class="text-muted">{{ transport.type_transport }}</small>
+                                                    </td>
+                                                    <td>
+                                                        {% if transport.est_complet %}
+                                                            {{ transport.adresse }}
+                                                        {% else %}
+                                                            <span class="text-danger">
+                                                                <i class="fas fa-exclamation-circle"></i>
+                                                                {{ transport.adresse }}
+                                                            </span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        {% if transport.est_complet %}
+                                                            {{ transport.telephone }}
+                                                        {% else %}
+                                                            <span class="text-danger">
+                                                                <i class="fas fa-exclamation-circle"></i>
+                                                                {{ transport.telephone }}
+                                                            </span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-info">{{ transport.societe }}</span>
+                                                        {% if not transport.est_complet and transport.societe == 'Société à compléter' %}
+                                                        <br>
+                                                        <small class="text-danger">Société manquante</small>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        {% if transport.est_complet %}
+                                                            <span class="badge bg-success">Complet</span>
+                                                        {% else %}
+                                                            <span class="badge bg-warning" title="Cliquez pour compléter">
+                                                                Incomplet
+                                                            </span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        {% if not transport.est_complet %}
+                                                        <button class="btn btn-warning btn-sm" 
+                                                                onclick="ouvrirModalAgent(
+                                                                    '{{ transport.agent|escapejs }}',
+                                                                    '{{ transport.adresse|escapejs }}',
+                                                                    '{{ transport.telephone|escapejs }}',
+                                                                    '{{ transport.societe|escapejs }}',
+                                                                    '{{ transport.agent_id|default:"" }}'
+                                                                )">
+                                                            <i class="fas fa-edit"></i> Compléter
+                                                        </button>
+                                                        {% endif %}
+                                                        <a href="{% url 'chauffeurs' %}?jour={{ jour.grouper }}&type_transport=ramassage&heure={{ transport.heure }}"
+                                                           class="btn btn-info btn-sm mt-1"
+                                                           title="Affecter un chauffeur">
+                                                            <i class="fas fa-user-plus"></i>
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted">Aucun ramassage pour ce jour</p>
+                                    {% endif %}
+                                {% endwith %}
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Départs pour ce jour -->
+                            {% if form.type_transport.value == 'depart' or form.type_transport.value == 'tous' %}
+                            <div>
+                                <h6 class="text-warning"><i class="fas fa-sign-out-alt"></i> Départs</h6>
+                                {% with departs_jour=jour.list|select_type:"depart" %}
+                                    {% if departs_jour %}
+                                    <div class="table-responsive">
+                                        <table class="table table-striped table-hover">
+                                            <thead class="table-warning">
+                                                <tr>
+                                                    <th>Agent</th>
+                                                    <th>Heure</th>
+                                                    <th>Adresse</th>
+                                                    <th>Téléphone</th>
+                                                    <th>Société</th>
+                                                    <th>Statut</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for transport in departs_jour %}
+                                                <tr>
+                                                    <td>
+                                                        <strong>{{ transport.agent }}</strong>
+                                                        {% if not transport.est_complet %}
+                                                        <br>
+                                                        <small class="text-danger">
+                                                            <i class="fas fa-exclamation-triangle"></i>
+                                                            Informations incomplètes
+                                                        </small>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-warning text-dark">{{ transport.heure_affichage }}</span>
+                                                        <br>
+                                                        <small class="text-muted">{{ transport.type_transport }}</small>
+                                                    </td>
+                                                    <td>
+                                                        {% if transport.est_complet %}
+                                                            {{ transport.adresse }}
+                                                        {% else %}
+                                                            <span class="text-danger">
+                                                                <i class="fas fa-exclamation-circle"></i>
+                                                                {{ transport.adresse }}
+                                                            </span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        {% if transport.est_complet %}
+                                                            {{ transport.telephone }}
+                                                        {% else %}
+                                                            <span class="text-danger">
+                                                                <i class="fas fa-exclamation-circle"></i>
+                                                                {{ transport.telephone }}
+                                                            </span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-info">{{ transport.societe }}</span>
+                                                        {% if not transport.est_complet and transport.societe == 'Société à compléter' %}
+                                                        <br>
+                                                        <small class="text-danger">Société manquante</small>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        {% if transport.est_complet %}
+                                                            <span class="badge bg-success">Complet</span>
+                                                        {% else %}
+                                                            <span class="badge bg-warning" title="Cliquez pour compléter">
+                                                                Incomplet
+                                                            </span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        {% if not transport.est_complet %}
+                                                        <button class="btn btn-warning btn-sm" 
+                                                                onclick="ouvrirModalAgent(
+                                                                    '{{ transport.agent|escapejs }}',
+                                                                    '{{ transport.adresse|escapejs }}',
+                                                                    '{{ transport.telephone|escapejs }}',
+                                                                    '{{ transport.societe|escapejs }}',
+                                                                    '{{ transport.agent_id|default:"" }}'
+                                                                )">
+                                                            <i class="fas fa-edit"></i> Compléter
+                                                        </button>
+                                                        {% endif %}
+                                                        <a href="{% url 'chauffeurs' %}?jour={{ jour.grouper }}&type_transport=depart&heure={{ transport.heure }}"
+                                                           class="btn btn-info btn-sm mt-1"
+                                                           title="Affecter un chauffeur">
+                                                            <i class="fas fa-user-plus"></i>
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted">Aucun départ pour ce jour</p>
+                                    {% endif %}
+                                {% endwith %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-4">
+                        <div class="text-muted">
+                            <i class="fas fa-list fa-3x mb-3"></i>
+                            <h5>Aucun transport trouvé</h5>
+                            <p>Aucun agent ne correspond aux critères de filtrage.</p>
+                            <div class="alert alert-info">
+                                <strong>Note :</strong> Les agents ayant une voiture personnelle sont automatiquement exclus des transports.
+                            </div>
+                            <a href="{% url 'upload' %}" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> Charger un Planning
+                            </a>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Div caché pour le contenu d'impression -->
+<div id="contenu-impression" style="display: none;"></div>
+
+<!-- Modal pour modifier les informations de l'agent -->
+<div class="modal fade" id="modal-modifier-agent" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-edit"></i>
+                    Compléter les informations de l'agent
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    Agent: <strong id="modal-agent-nom"></strong>
+                </p>
+                
+                <form id="form-modifier-agent">
+                    {% csrf_token %}
+                    <input type="hidden" id="agent-id" name="agent_id">
+                    <input type="hidden" id="agent-nom" name="nom">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Adresse *</label>
+                        <textarea id="agent-adresse" name="adresse" class="form-control" rows="3" required></textarea>
+                        <div class="form-text">
+                            Entrez l'adresse complète pour le ramassage
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Téléphone *</label>
+                        <input type="text" id="agent-telephone" name="telephone" class="form-control" required>
+                        <div class="form-text">
+                            Numéro de téléphone valide à 8 chiffres
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Société *</label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <select id="agent-societe-select" name="societe_id" class="form-control">
+                                    <option value="">Sélectionner une société</option>
+                                </select>
+                                <div class="form-text">Choisissez une société existante</div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text">Ou</span>
+                                    <input type="text" id="agent-societe-texte" name="societe_texte" 
+                                           class="form-control" placeholder="Entrez une nouvelle société">
+                                </div>
+                                <div class="form-text">Ou entrez le nom d'une nouvelle société</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="voiture_personnelle" id="agent-voiture">
+                            <label class="form-check-label" for="agent-voiture">
+                                Cet agent a une voiture personnelle
+                            </label>
+                        </div>
+                        <div class="form-text">
+                            Si coché, l'agent sera exclu des transports
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-save"></i> Enregistrer les modifications
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.agent-incomplet {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107;
+}
+
+.agent-incomplet:hover {
+    background-color: #ffeaa7 !important;
+}
+
+.heures-container {
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    padding: 15px;
+    margin-top: 10px;
+    border: 1px solid #dee2e6;
+}
+
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.btn-outline-primary, .btn-outline-warning {
+    padding: 2px 8px;
+    font-size: 0.8rem;
+}
+
+.heures-container .btn-group {
+    flex-shrink: 0;
+}
+</style>
+{% endblock %}

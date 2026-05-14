@@ -1,0 +1,167 @@
+{% extends 'gestion/base.html' %}
+
+{% block page_title %}Statistiques Géolocalisation{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Graphique de répartition
+    const ctx = document.getElementById('chartStats').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Adresses complètes', 'Adresses incomplètes'],
+            datasets: [{
+                data: [{{ agents_avec_adresse }}, {{ agents_total|add:"-agents_avec_adresse" }}],
+                backgroundColor: ['#28a745', '#dc3545']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Statut des adresses'
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-pie"></i> Statistiques de Géolocalisation
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-primary text-white text-center">
+                            <div class="card-body">
+                                <h2 class="card-title">{{ agents_total }}</h2>
+                                <p class="mb-0">Total agents</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-success text-white text-center">
+                            <div class="card-body">
+                                <h2 class="card-title">{{ agents_avec_adresse }}</h2>
+                                <p class="mb-0">Adresses complètes</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-warning text-white text-center">
+                            <div class="card-body">
+                                <h2 class="card-title">{{ taux_adresses }}%</h2>
+                                <p class="mb-0">Taux de complétude</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-chart-doughnut"></i> Répartition des adresses
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chartStats" width="400" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="card-title mb-0">
+                                    <i class="fas fa-lightbulb"></i> Recommandations
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <ul class="mb-0">
+                                    {% if taux_adresses < 80 %}
+                                    <li class="mb-2">
+                                        <strong class="text-danger">⚠️ Action requise :</strong>
+                                        Taux de complétude bas ({{ taux_adresses }}%)
+                                    </li>
+                                    {% endif %}
+                                    <li class="mb-2">
+                                        <strong>📊 Statistique :</strong>
+                                        {{ agents_avec_adresse }} agents sur {{ agents_total }} ont des adresses complètes
+                                    </li>
+                                    <li class="mb-2">
+                                        <strong>🗺️ Géolocalisation :</strong>
+                                        Les adresses complètes permettent une optimisation précise des itinéraires
+                                    </li>
+                                    <li class="mb-2">
+                                        <strong>💰 Impact économique :</strong>
+                                        Une optimisation précise peut réduire les coûts de transport jusqu'à 30%
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6><i class="fas fa-rocket"></i> Actions recommandées :</h6>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="text-center p-3">
+                                            <i class="fas fa-sync-alt fa-2x text-primary mb-2"></i>
+                                            <h6>Géolocaliser en masse</h6>
+                                            <small>Géocoder toutes les adresses automatiquement</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="text-center p-3">
+                                            <i class="fas fa-user-edit fa-2x text-success mb-2"></i>
+                                            <h6>Compléter les informations</h6>
+                                            <small>Mettre à jour les adresses manquantes</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="text-center p-3">
+                                            <i class="fas fa-chart-line fa-2x text-warning mb-2"></i>
+                                            <h6>Analyser les itinéraires</h6>
+                                            <small>Optimiser les trajets existants</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-md-12 text-center">
+                        <a href="{% url 'agents' %}?filtre=incomplets" class="btn btn-warning me-2">
+                            <i class="fas fa-user-edit"></i> Compléter les adresses
+                        </a>
+                        <a href="{% url 'carte' %}" class="btn btn-primary me-2">
+                            <i class="fas fa-map-marked-alt"></i> Optimiser les itinéraires
+                        </a>
+                        <a href="{% url 'rapport_optimisation' %}" class="btn btn-info">
+                            <i class="fas fa-file-alt"></i> Voir les rapports
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

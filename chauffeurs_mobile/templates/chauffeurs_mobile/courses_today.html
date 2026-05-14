@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Courses du Jour</title>
+    <style>
+        body { font-family: Arial; background: #f5f5f5; margin: 0; }
+        .header { background: #667eea; color: white; padding: 20px; }
+        .back-btn { background: rgba(255,255,255,0.2); color: white; padding: 10px; border: none; border-radius: 5px; text-decoration: none; }
+        .main { padding: 20px; }
+        .course-card { background: white; padding: 15px; margin: 10px 0; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .empty-state { text-align: center; padding: 40px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="/mobile/dashboard/" class="back-btn">← Retour</a>
+        <h2>📅 Courses du Jour</h2>
+    </div>
+    
+    <div class="main">
+        <div id="courses">
+            <div class="empty-state">
+                <p>📭 Aucune course aujourd'hui</p>
+                <p><a href="/mobile/selection/" style="color: #667eea;">➡ Créer une course</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historique Global - Super Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .header {
+            background: linear-gradient(135deg, #4361ee 0%, #7209b7 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .back-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+        }
+        .main-content {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        .filters-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .filter-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        .filter-group input,
+        .filter-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+        }
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-primary {
+            background: #4361ee;
+            color: white;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .stat-card.global {
+            background: linear-gradient(135deg, #4361ee 0%, #7209b7 100%);
+            color: white;
+        }
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: bold;
+        }
+        .chauffeur-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .chauffeur-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .chauffeur-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4361ee;
+        }
+        .badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            color: white;
+            font-size: 12px;
+        }
+        .badge.active { background: #4caf50; }
+        .badge.inactive { background: #f44336; }
+        .badge.super { background: #ff9800; }
+        .stats-mini {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-mini-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-mini-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        .stat-mini-label {
+            font-size: 12px;
+            color: #666;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+        }
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 15px;
+            color: white;
+            font-size: 12px;
+            display: inline-block;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4361ee;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <a href="/mobile/super/dashboard/" class="back-btn">← Retour</a>
+            <h2>📊 Historique Global</h2>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <!-- FILTRES SIMPLES -->
+        <div class="filters-card">
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label>Date début</label>
+                    <input type="date" id="dateDebut">
+                </div>
+                <div class="filter-group">
+                    <label>Date fin</label>
+                    <input type="date" id="dateFin">
+                </div>
+                <div class="filter-group">
+                    <label>Chauffeur</label>
+                    <select id="chauffeurSelect">
+                        <option value="tous">Tous les chauffeurs</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="loadHistorique()" style="width: 100%;">
+                🔍 Charger l'historique
+            </button>
+        </div>
+        
+        <!-- STATISTIQUES -->
+        <div id="statsContainer"></div>
+        
+        <!-- HISTORIQUE -->
+        <div id="historiqueContainer">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Chargement de l'historique...</p>
+                <p style="font-size: 14px; color: #999; margin-top: 10px;">
+                    Cliquez sur "Charger l'historique" pour commencer
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ============================================
+    // CODE SIMPLIFIÉ - GARANTI FONCTIONNEL
+    // ============================================
+    
+    // Initialisation
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("✅ Page historique chargée");
+        
+        // Définir les dates par défaut (mois en cours)
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        
+        document.getElementById('dateDebut').value = formatDate(firstDay);
+        document.getElementById('dateFin').value = formatDate(lastDay);
+        
+        // Charger les chauffeurs
+        loadChauffeurs();
+    });
+    
+    // Format date YYYY-MM-DD
+    function formatDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    
+    // Charger la liste des chauffeurs
+    async function loadChauffeurs() {
+        try {
+            const response = await fetch('/mobile/api/super/chauffeurs/');
+            const data = await response.json();
+            
+            if (data.success && data.chauffeurs) {
+                const select = document.getElementById('chauffeurSelect');
+                select.innerHTML = '<option value="tous">Tous les chauffeurs</option>';
+                
+                data.chauffeurs.forEach(ch => {
+                    const option = document.createElement('option');
+                    option.value = ch.id;
+                    option.textContent = `${ch.nom} (${ch.telephone || 'N/A'})`;
+                    select.appendChild(option);
+                });
+                
+                console.log(`✅ ${data.chauffeurs.length} chauffeurs chargés`);
+            }
+        } catch (error) {
+            console.error("❌ Erreur chargement chauffeurs:", error);
+        }
+    }
+    
+    // FONCTION PRINCIPALE - CHARGER HISTORIQUE
+    async function loadHistorique() {
+        console.log("🚀 CHARGEMENT HISTORIQUE...");
+        
+        const dateDebut = document.getElementById('dateDebut').value;
+        const dateFin = document.getElementById('dateFin').value;
+        const chauffeurId = document.getElementById('chauffeurSelect').value;
+        
+        if (!dateDebut || !dateFin) {
+            alert("Veuillez sélectionner une période");
+            return;
+        }
+        
+        // Afficher chargement
+        const historiqueContainer = document.getElementById('historiqueContainer');
+        historiqueContainer.innerHTML = `
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Chargement de l'historique...</p>
+                <p style="font-size: 14px; color: #666;">Période: ${formatDateDisplay(dateDebut)} - ${formatDateDisplay(dateFin)}</p>
+            </div>
+        `;
+        
+        // Construire URL
+        let url = `/mobile/api/super/historique/global/?date_debut=${dateDebut}&date_fin=${dateFin}`;
+        if (chauffeurId && chauffeurId !== 'tous') {
+            url += `&chauffeur_id=${chauffeurId}`;
+        }
+        
+        console.log("📡 API Call:", url);
+        
+        try {
+            const response = await fetch(url);
+            console.log("📦 Status:", response.status);
+            
+            const data = await response.json();
+            console.log("📊 Données reçues:", data);
+            
+            if (data.success) {
+                // ✅ AFFICHER LES DONNÉES
+                displayStats(data.stats_globales || {});
+                displayHistorique(data);
+            } else {
+                // ❌ ERREUR API
+                historiqueContainer.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Erreur</h3>
+                        <p>${data.error || 'Erreur inconnue'}</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error("❌ Erreur réseau:", error);
+            historiqueContainer.innerHTML = `
+                <div class="error">
+                    <h3>❌ Erreur de connexion</h3>
+                    <p>${error.message}</p>
+                </div>
+            `;
+        }
+    }
+    
+    // Afficher les statistiques
+    function displayStats(stats) {
+        const container = document.getElementById('statsContainer');
+        
+        container.innerHTML = `
+            <div class="stats-grid">
+                <div class="stat-card global">
+                    <div class="value">${stats.total_courses || 0}</div>
+                    <div>Courses totales</div>
+                    <div style="font-size: 14px; margin-top: 10px; opacity: 0.9;">
+                        ${stats.chauffeurs_actifs || 0} chauffeur(s)
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">${(stats.total_revenu || 0).toFixed(2)} DNT</div>
+                    <div>Revenu total</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">${stats.total_agents || 0}</div>
+                    <div>Agents transportés</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">${(stats.moyenne_revenu || 0).toFixed(2)} DNT</div>
+                    <div>Moyenne/course</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Afficher l'historique
+    function displayHistorique(data) {
+        const container = document.getElementById('historiqueContainer');
+        
+        if (!data.historique || data.historique.length === 0) {
+            container.innerHTML = `
+                <div class="no-data">
+                    <div style="font-size: 48px; margin-bottom: 20px;">📭</div>
+                    <h3>Aucune donnée pour cette période</h3>
+                    <p style="color: #666; margin-top: 10px;">
+                        Essayez avec une autre date
+                    </p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = `
+            <div style="margin-bottom: 20px;">
+                <h3 style="color: #333;">${data.historique.length} chauffeur(s) trouvé(s)</h3>
+                <p style="color: #666;">Période: ${data.periode || 'Période sélectionnée'}</p>
+            </div>
+        `;
+        
+        data.historique.forEach(chauffeur => {
+            html += `
+                <div class="chauffeur-section">
+                    <div class="chauffeur-header">
+                        <div>
+                            <span class="chauffeur-name">${chauffeur.nom || 'Chauffeur'}</span>
+                            ${chauffeur.super_chauffeur ? '<span class="badge super" style="margin-left: 10px;">👑 SUPER</span>' : ''}
+                        </div>
+                        <span class="badge ${chauffeur.actif ? 'active' : 'inactive'}">
+                            ${chauffeur.actif ? '● Actif' : '● Inactif'}
+                        </span>
+                    </div>
+                    
+                    <div class="stats-mini">
+                        <div class="stat-mini-card">
+                            <div class="stat-mini-value">${chauffeur.statistiques?.courses_total || 0}</div>
+                            <div class="stat-mini-label">Courses</div>
+                        </div>
+                        <div class="stat-mini-card">
+                            <div class="stat-mini-value">${(chauffeur.statistiques?.revenu_total || 0).toFixed(2)} DNT</div>
+                            <div class="stat-mini-label">Revenu</div>
+                        </div>
+                        <div class="stat-mini-card">
+                            <div class="stat-mini-value">${chauffeur.statistiques?.agents_transportes || 0}</div>
+                            <div class="stat-mini-label">Agents</div>
+                        </div>
+                    </div>
+                    
+                    ${chauffeur.courses && chauffeur.courses.length > 0 ? `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Heure</th>
+                                    <th>Agents</th>
+                                    <th>Statut</th>
+                                    <th>Prix</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${chauffeur.courses.map(course => `
+                                    <tr>
+                                        <td>${course.date_display || course.date}</td>
+                                        <td>${course.type_display || course.type}</td>
+                                        <td>${course.heure_display || course.heure}</td>
+                                        <td>${course.nb_agents || 0}</td>
+                                        <td>
+                                            <span class="status-badge" style="background: ${getStatusColor(course.statut)};">
+                                                ${course.statut_display || course.statut}
+                                            </span>
+                                        </td>
+                                        <td><strong>${course.prix_display || '0.00 DNT'}</strong></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    ` : `
+                        <p style="text-align: center; color: #999; padding: 20px;">
+                            Aucune course sur cette période
+                        </p>
+                    `}
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    // Helper pour les couleurs de statut
+    function getStatusColor(statut) {
+        const colors = {
+            'validee': '#4caf50',
+            'payee': '#4caf50',
+            'en_attente': '#ff9800',
+            'terminee': '#2196f3',
+            'en_cours': '#2196f3',
+            'annulee': '#f44336'
+        };
+        return colors[statut] || '#9e9e9e';
+    }
+    
+    // Format date pour affichage
+    function formatDateDisplay(dateStr) {
+        try {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('fr-FR');
+        } catch (e) {
+            return dateStr;
+        }
+    }
+    </script>
+</body>
+</html>

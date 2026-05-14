@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mes Notifications</title>
+    <style>
+        /* Style similaire au dashboard */
+        body { font-family: Arial; background: #f5f5f5; margin: 0; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; }
+        .back-btn { background: rgba(255,255,255,0.2); color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; }
+        .main { padding: 20px; max-width: 800px; margin: 0 auto; }
+        .notification-item { background: white; padding: 15px; margin: 10px 0; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-left: 5px solid #ff9800; }
+        .notification-item.read { opacity: 0.7; border-left-color: #ccc; }
+        .notification-time { font-size: 12px; color: #666; margin-top: 5px; }
+        .mark-read-btn { background: #4caf50; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="/mobile/dashboard/" class="back-btn">← Dashboard</a>
+        <h2>🔔 Mes Notifications</h2>
+    </div>
+    
+    <div class="main">
+        <div id="notificationsList">
+            <p>Chargement des notifications...</p>
+        </div>
+    </div>
+    
+    <script>
+function getCsrfToken() {
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+async function loadNotifications() {
+    try {
+        const container = document.getElementById('notificationsList');
+        container.innerHTML = '<p>Chargement...</p>';
+        
+        const response = await fetch('/mobile/api/notifications/');
+        const data = await response.json();
+        
+        console.log("Notifications data:", data);
+        
+        if (data.success) {
+            displayNotifications(data.notifications);
+        } else {
+            container.innerHTML = `<div class="error">❌ ${data.error}</div>`;
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        document.getElementById('notificationsList').innerHTML = 
+            '<div class="error">Erreur de connexion</div>';
+    }
+}
+
+function displayNotifications(notifications) {
+    const container = document.getElementById('notificationsList');
+    
+    if (!notifications || notifications.length === 0) {
+        container.innerHTML = '<p>📭 Aucune notification</p>';
+        return;
+    }
+    
+    let html = '';
+    notifications.forEach(notif => {
+        let icon = '🔔';
+        if (notif.type === 'super_reservation') icon = '📅';
+        if (notif.type === 'super_annulation') icon = '❌';
+        if (notif.type === 'reservation') icon = '✅';
+        if (notif.type === 'annulation') icon = '⚠️';
+        if (notif.type === 'info') icon = 'ℹ️';
+        
+        html += `
+            <div class="notification-item ${notif.vue ? 'read' : 'unread'}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="flex: 1;">
+                        <div style="font-size: 24px; margin-bottom: 10px;">${icon}</div>
+                        <div style="font-weight: ${notif.vue ? 'normal' : 'bold'}; font-size: 16px;">
+                            ${notif.message}
+                        </div>
+                        <div class="notification-time">${notif.created_at}</div>
+                        ${notif.data && notif.data.agent_nom ? `
+                            <div style="margin-top: 8px; font-size: 14px; color: #666;">
+                                👤 Agent: ${notif.data.agent_nom}
+                                ${notif.data.type_transport ? ` • 🚗 ${notif.data.type_transport}` : ''}
+                                ${notif.data.heure_libelle ? ` • ⏰ ${notif.data.heure_libelle}` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                    ${!notif.vue ? `
+                        <button class="mark-read-btn" onclick="markAsRead(${notif.id}, this)">
+                            ✓ Lu
+                        </button>
+                    ` : `
+                        <span style="color: #4caf50; font-size: 12px;">✓ Lu</span>
+                    `}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+async function markAsRead(notificationId, button) {
+    try {
+        console.log("Marquer comme lu:", notificationId);
+        
+        const response = await fetch(`/mobile/api/notifications/${notificationId}/read/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        console.log("Réponse:", data);
+        
+        if (data.success) {
+            // Mettre à jour le bouton
+            if (button) {
+                button.textContent = '✓ Lu';
+                button.disabled = true;
+                button.className = 'btn-read';
+            }
+            
+            // Recharger les notifications après un délai
+            setTimeout(loadNotifications, 500);
+        } else {
+            alert('Erreur: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur de connexion');
+    }
+}
+
+// Marquer toutes comme lues
+async function markAllAsRead() {
+    if (!confirm('Marquer toutes les notifications comme lues ?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/mobile/api/notifications/mark-all-read/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ ${data.message}`);
+            loadNotifications();
+        } else {
+            alert(`❌ ${data.error}`);
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        alert('Erreur de connexion');
+    }
+}
+
+// Ajouter un bouton "Tout marquer comme lu" dans le header
+document.addEventListener('DOMContentLoaded', function() {
+    // Ajouter le bouton dans le header
+    const header = document.querySelector('.header');
+    if (header) {
+        header.innerHTML += `
+            <button onclick="markAllAsRead()" style="position: absolute; right: 20px; top: 20px; background: #4caf50; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer;">
+                ✅ Tout marquer comme lu
+            </button>
+        `;
+    }
+    
+    // Charger les notifications
+    loadNotifications();
+    
+    // Rafraîchir toutes les minutes
+    setInterval(loadNotifications, 60000);
+});
+    </script>
+</body>
+</html>

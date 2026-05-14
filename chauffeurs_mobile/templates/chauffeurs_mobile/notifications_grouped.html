@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifications par Heure</title>
+    <style>
+        /* Style similaire aux autres pages */
+        body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; }
+        .back-btn { background: rgba(255,255,255,0.2); color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; }
+        .main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .group-card { background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #f0f0f0; }
+        .group-time { font-size: 18px; font-weight: bold; color: #333; }
+        .group-count { background: #ff9800; color: white; padding: 5px 15px; border-radius: 15px; font-size: 14px; font-weight: bold; }
+        .agents-list { margin-top: 15px; }
+        .agent-item { padding: 10px; background: #f9f9f9; margin-bottom: 8px; border-radius: 5px; border-left: 3px solid #4caf50; }
+        .agent-name { font-weight: bold; color: #333; }
+        .agent-details { color: #666; font-size: 14px; margin-top: 5px; }
+        .mark-read-btn { background: #4caf50; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .empty-state { text-align: center; padding: 40px; color: #666; }
+        .loading { text-align: center; padding: 40px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="/mobile/notifications/" class="back-btn">← Toutes les notifications</a>
+        <h2>🔔 Notifications par Heure</h2>
+    </div>
+    
+    <div class="main">
+        <div id="groupsList">
+            <div class="loading">
+                <p>Chargement des notifications groupées...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function getCsrfToken() {
+        const name = 'csrftoken';
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    async function loadGroupedNotifications() {
+        try {
+            const container = document.getElementById('groupsList');
+            
+            const response = await fetch('/mobile/api/notifications/grouped/');
+            const data = await response.json();
+            
+            if (data.success) {
+                displayGroups(data.grouped_notifications, data.stats);
+            } else {
+                container.innerHTML = `<div class="error">❌ ${data.error}</div>`;
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            document.getElementById('groupsList').innerHTML = 
+                '<div class="error">Erreur de connexion</div>';
+        }
+    }
+
+    function displayGroups(groups, stats) {
+        const container = document.getElementById('groupsList');
+        
+        if (!groups || groups.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <p>📭 Aucune notification groupée</p>
+                    <p><small>Toutes vos notifications sont affichées individuellement</small></p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = `
+            <div style="margin-bottom: 20px; padding: 15px; background: #e8f5e9; border-radius: 10px;">
+                <strong>📊 Résumé :</strong>
+                ${stats.total_groups} groupe(s) - 
+                ${stats.total_unread} notification(s) non lue(s)
+            </div>
+        `;
+        
+        groups.forEach(group => {
+            html += `
+                <div class="group-card">
+                    <div class="group-header">
+                        <div>
+                            <div class="group-time">
+                                ${group.type_transport_display} - ${group.heure_libelle}
+                            </div>
+                            <div style="color: #666; font-size: 14px; margin-top: 5px;">
+                                ${group.date_transport}
+                            </div>
+                        </div>
+                        <div class="group-count">${group.count} notification(s)</div>
+                    </div>
+                    
+                    ${group.agents && group.agents.length > 0 ? `
+                        <div class="agents-list">
+                            <h4 style="margin-bottom: 10px; color: #333;">👥 Agents à transporter :</h4>
+                            ${group.agents.map(agent => `
+                                <div class="agent-item">
+                                    <div class="agent-name">${agent.nom}</div>
+                                    <div class="agent-details">
+                                        ${agent.adresse ? `📍 ${agent.adresse}<br>` : ''}
+                                        ${agent.telephone ? `📞 ${agent.telephone}` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    
+                    <div style="margin-top: 20px; text-align: right;">
+                        <button class="mark-read-btn" onclick="markGroupAsRead('${group.groupe_key}')">
+                            ✅ Marquer ce groupe comme lu
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+
+    async function markGroupAsRead(groupeKey) {
+        if (!confirm('Marquer toutes les notifications de ce groupe comme lues ?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch('/mobile/api/notifications/group/mark-read/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({ groupe_key: groupeKey })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert(`✅ ${data.message}`);
+                loadGroupedNotifications(); // Recharger la liste
+            } else {
+                alert(`❌ ${data.error}`);
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            alert('Erreur de connexion');
+        }
+    }
+
+    // Initialisation
+    document.addEventListener('DOMContentLoaded', function() {
+        loadGroupedNotifications();
+        
+        // Rafraîchir toutes les 30 secondes
+        setInterval(loadGroupedNotifications, 30000);
+    });
+    </script>
+</body>
+</html>

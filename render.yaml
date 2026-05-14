@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: navette
+    runtime: python
+    buildCommand: ./build.sh
+    startCommand: gunicorn transport_app.wsgi:application --workers=4 --threads=2 --timeout=60
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: POSITIONSTACK_API_KEY
+        value: 88bcabc4997f720becd5cb84b44c7b6e  # Mettez la valeur directement
+      - key: DATABASE_URL
+        fromDatabase:
+          name: navette_db2
+          property: connectionString
+      - key: RENDER
+        value: true
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DJANGO_SETTINGS_MODULE  # AJOUTEZ CETTE LIGNE
+        value: transport_app.settings
+
+databases:
+  - name: navette_db2
+    databaseName: navette_db2_bspr_d0an  # Nom complet
+    user: navette_db2_bspr_user
+    plan: free
