@@ -1153,9 +1153,9 @@ def gestion_chauffeurs(request):
         else:
             # Si pas de prix défini, utiliser le prix par défaut selon le type de chauffeur
             if course.chauffeur.type_chauffeur == 'taxi':
-                total_prix_courses += getattr(settings, 'PRIX_COURSE_TAXI', 15.0)
+                total_prix_courses += getattr(settings, 'PRIX_COURSE_TAXI', 23.0)
             elif course.chauffeur.type_chauffeur == 'prive':
-                total_prix_courses += getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 10.0)
+                total_prix_courses += getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 19.0)
     
     # ========== FORMULAIRE D'AFFECTATION ==========
     chauffeurs_disponibles = Chauffeur.objects.filter(actif=True).order_by('nom')
@@ -1218,9 +1218,9 @@ def gestion_chauffeurs(request):
                 except ValueError:
         # Prix automatique selon le type de chauffeur si le prix personnalisé est invalide
                     if chauffeur.type_chauffeur == 'taxi':
-                        prix_total_final = getattr(settings, 'PRIX_COURSE_TAXI', 15.0)
+                        prix_total_final = getattr(settings, 'PRIX_COURSE_TAXI', 23.0)
                     elif chauffeur.type_chauffeur == 'prive':
-                        prix_total_final = getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 10.0)
+                        prix_total_final = getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 19.0)
                     else:
                         prix_total_final = getattr(settings, 'PRIX_COURSE_SOCIETE', 0.0)
                     messages.warning(request, f"Prix invalide. Utilisation du prix par défaut: {prix_total_final}")
@@ -1232,9 +1232,9 @@ def gestion_chauffeurs(request):
                 else:
         # Fallback aux prix par défaut
                     if chauffeur.type_chauffeur == 'taxi':
-                        prix_total_final = getattr(settings, 'PRIX_COURSE_TAXI', 15.0)
+                        prix_total_final = getattr(settings, 'PRIX_COURSE_TAXI', 23.0)
                     elif chauffeur.type_chauffeur == 'prive':
-                        prix_total_final = getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 10.0)
+                        prix_total_final = getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 19.0)
                     else:
                         prix_total_final = getattr(settings, 'PRIX_COURSE_SOCIETE', 0.0)
                     print(f"💰 Prix automatique (fallback): {prix_total_final} (Type: {chauffeur.type_chauffeur})")            
