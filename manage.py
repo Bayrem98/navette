@@ -3,8 +3,10 @@
 import os
 import sys
 
+# IMPORTANT : Appliquer le patch avant tout
+import patch  # <-- AJOUTEZ CETTE LIGNE
+
 def main():
-    """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'transport_app.settings')
     try:
         from django.core.management import execute_from_command_line
