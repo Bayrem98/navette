@@ -664,3 +664,38 @@ class Affectation(models.Model):
             print(f"✅ {sessions_deleted} session(s) supprimée(s)")
         except Exception as e:
             print(f"❌ Erreur: {e}")
+class PlanningExcel(models.Model):
+    """Stockage du planning Excel dans la base de données"""
+    
+    nom_fichier = models.CharField(max_length=255)
+    date_upload = models.DateTimeField(auto_now_add=True)
+    est_actif = models.BooleanField(default=True)
+    
+    # Utiliser TextField pour SQLite (compatible avec tous les SGBD)
+    donnees = models.TextField(default='[]')  # Stocké en JSON string
+    dates_disponibles = models.TextField(default='[]')  # Stocké en JSON string
+    nombre_lignes = models.IntegerField(default=0)
+    
+    class Meta:
+        ordering = ['-date_upload']
+        verbose_name = "Planning Excel"
+        verbose_name_plural = "Plannings Excel"
+    
+    def __str__(self):
+        return f"{self.nom_fichier} - {self.date_upload.strftime('%d/%m/%Y %H:%M')}"
+    
+    def get_donnees(self):
+        """Retourne les données sous forme de liste Python"""
+        import json
+        try:
+            return json.loads(self.donnees)
+        except:
+            return []
+    
+    def get_dates_disponibles(self):
+        """Retourne les dates sous forme de liste Python"""
+        import json
+        try:
+            return json.loads(self.dates_disponibles)
+        except:
+            return []

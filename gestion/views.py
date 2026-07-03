@@ -16,6 +16,8 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
+from planning_db import PlanningDB
+
 from .models import Societe, Agent, Affectation, HeureTransport, Chauffeur, Course
 from .forms import UploadFileForm, AgentForm, AffectationMultipleForm, FiltreForm, ChauffeurForm, AgentModificationForm, ImportAgentForm, SocieteForm, SocieteModificationForm
 from .utils import GestionnaireTransport
@@ -591,6 +593,15 @@ def upload_files(request):
                     wrapped_file = FileWrapper(temp_path)
                     success = gestionnaire.charger_planning(wrapped_file)
                     
+                    # ===== NOUVEAU : SAUVEGARDER EN BASE DE DONNÉES =====
+                    fichier_planning.seek(0)
+                    planning_db = PlanningDB.save_planning(fichier_planning, fichier_planning.name)
+                    
+                    if planning_db:
+                        print(f"✅ Planning sauvegardé en base de données: {planning_db.nombre_lignes} lignes")
+                        messages.info(request, f"💾 Planning sauvegardé en base de données ({planning_db.nombre_lignes} lignes)")
+                    # ===== FIN NOUVEAU =====
+                    
                     if success:
                         # Stocker les infos dans la session
                         request.session['uploaded_file'] = {
@@ -743,12 +754,17 @@ def upload_files(request):
     else:
         form = UploadFileForm()
     
+    # ===== NOUVEAU : Récupérer les statistiques du planning en base =====
+    planning_stats = PlanningDB.get_planning_stats()
+    # ===== FIN NOUVEAU =====
+    
     context = {
         'form': form,
         'uploaded_file': uploaded_file_info,
         'uploaded_info_file': uploaded_info_file_info,
         'planning_charge': planning_charge,
         'cloudinary_active': cloudinary_active,
+        'planning_stats': planning_stats,  # AJOUTÉ
     }
     return render(request, 'gestion/upload.html', context)
 @login_required

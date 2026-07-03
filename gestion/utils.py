@@ -27,6 +27,29 @@ class GestionnaireTransport:
         self.temp_path = os.path.join(settings.MEDIA_ROOT, 'temp_planning.xlsx')
         self._cache_transports = {}
         self.request = request
+        
+        # Nettoyer les fichiers corrompus au démarrage
+        self.nettoyer_fichiers_temporaires()
+    
+    def nettoyer_fichiers_temporaires(self):
+        """Nettoie les fichiers temporaires corrompus"""
+        try:
+            if not os.path.exists(settings.MEDIA_ROOT):
+                return
+            for fichier in os.listdir(settings.MEDIA_ROOT):
+                if fichier.startswith('temp_') and fichier.endswith('.xlsx'):
+                    chemin = os.path.join(settings.MEDIA_ROOT, fichier)
+                    try:
+                        # Tester si le fichier est valide
+                        pd.read_excel(chemin, nrows=1, engine='openpyxl')
+                    except:
+                        try:
+                            os.remove(chemin)
+                            print(f"🗑️ Suppression fichier corrompu: {fichier}")
+                        except:
+                            pass
+        except Exception as e:
+            print(f"⚠️ Erreur nettoyage: {e}")
     
     def _lire_contenu_fichier(self, fichier):
         """Lit le contenu d'un fichier quel que soit son type"""
@@ -37,10 +60,12 @@ class GestionnaireTransport:
                     fichier.seek(0)
                 return content
             elif isinstance(fichier, str) and fichier.startswith('http'):
-                response = requests.get(fichier)
+                response = requests.get(fichier, timeout=30)
                 response.raise_for_status()
                 return response.content
             elif isinstance(fichier, str) and os.path.exists(fichier):
+                if os.path.getsize(fichier) < 100:
+                    raise ValueError(f"Fichier {fichier} est vide ou trop petit")
                 with open(fichier, 'rb') as f:
                     return f.read()
             elif isinstance(fichier, bytes):
@@ -69,20 +94,48 @@ class GestionnaireTransport:
             return False
     
     def charger_planning(self, fichier):
-        """Charge le fichier Excel de planning"""
+        """Charge le fichier Excel de planning avec gestion des erreurs"""
         try:
             print("📂 Chargement du planning...")
             
             content = self._lire_contenu_fichier(fichier)
             
+            # Vérifier que le contenu n'est pas vide
+            if not content or len(content) < 100:
+                print("❌ Fichier vide ou trop petit")
+                return False
+            
+            # Sauvegarder le fichier temporairement
             os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
             with open(self.temp_path, 'wb') as f:
                 f.write(content)
             
+            # Vérifier si c'est un vrai fichier Excel
+            try:
+                df_test = pd.read_excel(BytesIO(content), nrows=1, engine='openpyxl')
+                print("✅ Fichier Excel valide (openpyxl)")
+            except Exception as e1:
+                try:
+                    df_test = pd.read_excel(BytesIO(content), nrows=1, engine='xlrd')
+                    print("✅ Fichier Excel valide (xlrd)")
+                except Exception as e2:
+                    print(f"❌ Fichier Excel invalide: {e1}")
+                    return False
+            
+            # Extraire les dates
             self.extraire_dates_reelles(content)
             
-            df = pd.read_excel(BytesIO(content), header=None, engine='openpyxl')
+            # Lire le fichier Excel
+            try:
+                df = pd.read_excel(BytesIO(content), header=None, engine='openpyxl')
+            except:
+                try:
+                    df = pd.read_excel(BytesIO(content), header=None, engine='xlrd')
+                except Exception as e:
+                    print(f"❌ Erreur lecture Excel: {e}")
+                    return False
             
+            # Trouver l'en-tête
             header_row_idx = None
             for idx in range(min(5, len(df))):
                 row = df.iloc[idx]
@@ -95,16 +148,24 @@ class GestionnaireTransport:
                     break
             
             if header_row_idx is not None:
-                self.df_planning = pd.read_excel(
-                    BytesIO(content), 
-                    skiprows=header_row_idx + 1,
-                    engine='openpyxl'
-                )
+                try:
+                    self.df_planning = pd.read_excel(
+                        BytesIO(content), 
+                        skiprows=header_row_idx + 1,
+                        engine='openpyxl'
+                    )
+                except:
+                    self.df_planning = pd.read_excel(
+                        BytesIO(content), 
+                        skiprows=header_row_idx + 1,
+                        engine='xlrd'
+                    )
             else:
                 self.df_planning = df
             
             self.df_planning = self.df_planning.dropna(how='all').reset_index(drop=True)
             
+            # Normaliser les colonnes
             noms_colonnes = ['Salarie', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche', 'Qualification']
             if len(self.df_planning.columns) > len(noms_colonnes):
                 self.df_planning = self.df_planning.iloc[:, :len(noms_colonnes)]
@@ -212,7 +273,15 @@ class GestionnaireTransport:
             else:
                 content = self._lire_contenu_fichier(fichier)
             
-            df_raw = pd.read_excel(BytesIO(content), header=None, engine='openpyxl')
+            try:
+                df_raw = pd.read_excel(BytesIO(content), header=None, engine='openpyxl')
+            except:
+                try:
+                    df_raw = pd.read_excel(BytesIO(content), header=None, engine='xlrd')
+                except Exception as e:
+                    print(f"⚠️ Erreur lecture pour extraction dates: {e}")
+                    self.generer_dates_par_defaut()
+                    return self.dates_par_jour
             
             print(f"📊 Structure du fichier: {len(df_raw)} lignes, {len(df_raw.columns)} colonnes")
             
@@ -450,7 +519,6 @@ class GestionnaireTransport:
                     key_ramassage = (jour_nom, heure_debut_norm, 'ramassage')
                     if key_ramassage not in transports_par_heure:
                         transports_par_heure[key_ramassage] = []
-                    # Éviter les doublons
                     if not any(a['agent'] == nom_agent for a in transports_par_heure[key_ramassage]):
                         transports_par_heure[key_ramassage].append({
                             'agent': nom_agent,
@@ -472,7 +540,6 @@ class GestionnaireTransport:
                     key_depart = (jour_nom, heure_fin_norm, 'depart')
                     if key_depart not in transports_par_heure:
                         transports_par_heure[key_depart] = []
-                    # Éviter les doublons
                     if not any(a['agent'] == nom_agent for a in transports_par_heure[key_depart]):
                         transports_par_heure[key_depart].append({
                             'agent': nom_agent,
@@ -485,7 +552,6 @@ class GestionnaireTransport:
         
         self._cache_transports[cache_key] = transports_par_heure
         
-        # Afficher les heures disponibles pour déboguer
         heures_disponibles = {}
         for (jour, heure, type_t) in transports_par_heure.keys():
             if heure not in heures_disponibles:
@@ -508,7 +574,6 @@ class GestionnaireTransport:
         heure_ete_active = filtre_form.cleaned_data.get('heure_ete', False)
         filtre_agents = filtre_form.cleaned_data.get('filtre_agents', 'tous')
 
-        # Récupérer l'heure spécifique si elle existe
         heure_specifique = None
         if hasattr(filtre_form, 'data') and filtre_form.data:
             heure_specifique_str = filtre_form.data.get('heure_specifique', '')
@@ -527,7 +592,6 @@ class GestionnaireTransport:
         if type_transport_selectionne in ['tous', 'depart']:
             heures_depart = [h for h, _ in self.get_heures_config('depart')]
 
-        # Si une heure spécifique est demandée, filtrer uniquement cette heure
         if heure_specifique is not None:
             if type_transport_selectionne in ['tous', 'ramassage']:
                 if heure_specifique in heures_ramassage:
@@ -546,21 +610,17 @@ class GestionnaireTransport:
         liste_transports = []
         
         for (jour, heure, type_transport), agents in tous_transports.items():
-            # Filtrer par jour
             if jour_selectionne != 'Tous' and jour != jour_selectionne:
                 continue
             
-            # Filtrer par type de transport
             if type_transport_selectionne != 'tous' and type_transport != type_transport_selectionne:
                 continue
             
-            # Filtrer par heure (CRITIQUE pour le filtrage spécifique)
             if type_transport == 'ramassage' and heure not in heures_ramassage:
                 continue
             if type_transport == 'depart' and heure not in heures_depart:
                 continue
             
-            # Ajustement heure d'été
             if heure_ete_active:
                 heure_affichee = heure - 1
                 if heure_affichee < 0:
@@ -568,7 +628,6 @@ class GestionnaireTransport:
             else:
                 heure_affichee = heure
             
-            # Ajouter les transports
             for agent_data in agents:
                 if filtre_agents == 'complets' and not agent_data['est_complet']:
                     continue
@@ -589,13 +648,11 @@ class GestionnaireTransport:
                     'agent_id': agent_data['agent_id']
                 })
         
-        # Trier
         ordre_jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
         liste_transports.sort(key=lambda x: (ordre_jours.index(x['jour']), x['type_transport'], x['heure']))
         
-        print(f"✅ {len(liste_transports)} transports trouvés pour les heures: ramassage={heures_ramassage}, depart={heures_depart}")
+        print(f"✅ {len(liste_transports)} transports trouvés")
         
-        # Afficher les premières heures trouvées pour déboguer
         if liste_transports:
             heures_trouvees = set()
             for t in liste_transports[:20]:

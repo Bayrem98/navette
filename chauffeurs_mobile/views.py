@@ -11,6 +11,8 @@ from django.utils import timezone
 from django.db.models import Q
 import csv
 
+from planning_db import PlanningDB
+
 try:
     # Essayer d'importer depuis votre structure d'app
     from django.apps import apps
@@ -3591,7 +3593,8 @@ def api_super_reservations_demain(request):
         return JsonResponse({'success': False, 'error': 'Non authentifié'}, status=401)
     
     try:
-        from datetime import date, timedelta
+        from datetime import date, timedelta, datetime
+        from planning_db import PlanningDB
         
         from django.apps import apps
         Chauffeur = apps.get_model('gestion', 'Chauffeur')
@@ -3608,15 +3611,32 @@ def api_super_reservations_demain(request):
                 'error': 'Accès réservé aux super-chauffeurs'
             }, status=403)
         
-        demain = date.today() + timedelta(days=1)
-        jours_fr = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
-        jour_semaine = jours_fr[demain.weekday()]
+        # 🔥 CORRECTION : Utiliser des objets date correctement
+        demain_date = date.today() + timedelta(days=1)
+        demain_str = demain_date.strftime('%Y-%m-%d')
+        date_demain_str = demain_date.strftime("%d/%m/%Y")
         
-        print(f"=== SUPER DASHBOARD - Agents pour {demain} ({jour_semaine}) ===")
+        jours_fr = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+        jour_semaine = jours_fr[demain_date.weekday()]
+        
+        print(f"=== SUPER DASHBOARD - Agents pour {demain_date} ({jour_semaine}) ===")
+        
+        # 🔥 CHARGER DEPUIS LA BASE DE DONNÉES AVEC LA BONNE DATE
+        data = PlanningDB.get_planning_for_date(demain_str)
+        
+        if data is None:
+            print(f"⚠️ Aucun planning trouvé en base de données pour {demain_str}")
+            return JsonResponse({
+                'success': True,
+                'reservations': [],
+                'message': 'Aucun planning trouvé',
+                'planning_charge': False,
+                'date': demain_str
+            })
         
         # 1. Récupérer TOUTES les réservations pour demain
         reservations = Reservation.objects.filter(
-            date_reservation=demain,
+            date_reservation=demain_date,
             statut__in=['reservee', 'confirmee']
         ).select_related('chauffeur', 'agent', 'heure_transport')
         
@@ -3637,7 +3657,7 @@ def api_super_reservations_demain(request):
         print(f"   Ramassage: {[h.heure for h in heures_ramassage]}")
         print(f"   Départ: {[h.heure for h in heures_depart]}")
         
-        # 3. Charger le planning
+        # 3. Charger le planning depuis la session
         try:
             from gestion.utils import GestionnaireTransport
             
@@ -3654,7 +3674,6 @@ def api_super_reservations_demain(request):
             
             # Vérifier que la date de demain est dans le planning
             dates_par_jour = gestionnaire.dates_par_jour
-            date_demain_str = demain.strftime("%d/%m/%Y")
             
             jour_correspondant = None
             for jour_planning, date_planning_str in dates_par_jour.items():
@@ -3664,12 +3683,11 @@ def api_super_reservations_demain(request):
                     break
             
             if not jour_correspondant:
-                # Essayer de parser les dates pour comparer
                 print("⚠️ Date exacte non trouvée, tentative de parsing...")
                 for jour_planning, date_planning_str in dates_par_jour.items():
                     try:
                         date_planning = datetime.strptime(date_planning_str, "%d/%m/%Y").date()
-                        if date_planning == demain:
+                        if date_planning == demain_date:
                             jour_correspondant = jour_planning
                             print(f"✅ Date correspondante trouvée: {date_planning} -> {jour_correspondant}")
                             break
@@ -3736,7 +3754,6 @@ def api_super_reservations_demain(request):
             
             print(f"  📋 {len(liste_transports)} agent(s) trouvé(s) pour {heure_valeur}h")
             
-            # Afficher les premiers agents pour déboguer
             if liste_transports:
                 print(f"     Exemples: {[t['agent'] for t in liste_transports[:3]]}")
             
@@ -3816,7 +3833,6 @@ def api_super_reservations_demain(request):
             
             print(f"  📋 {len(liste_transports)} agent(s) trouvé(s) pour {heure_valeur}h")
             
-            # Afficher les premiers agents pour déboguer
             if liste_transports:
                 print(f"     Exemples: {[t['agent'] for t in liste_transports[:3]]}")
             
@@ -3923,8 +3939,8 @@ def api_super_reservations_demain(request):
         return JsonResponse({
             'success': True,
             'is_super_chauffeur': True,
-            'date_demain': demain.strftime('%Y-%m-%d'),
-            'date_demain_display': demain.strftime('%d/%m/%Y'),
+            'date_demain': demain_str,
+            'date_demain_display': date_demain_str,
             'jour_semaine': jour_semaine,
             'jour_correspondant_planning': jour_a_utiliser,
             'date_planning': date_demain_str,
@@ -3969,7 +3985,11 @@ def api_super_reservations_demain(request):
         print(f"❌ Erreur: {e}")
         import traceback
         traceback.print_exc()
-        return JsonResponse({'success': False, 'error': str(e)})
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'reservations': []
+        }, status=500)
 @csrf_exempt
 @require_POST
 def api_super_reserver_agent(request):
