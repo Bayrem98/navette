@@ -11,6 +11,8 @@ from django.utils import timezone
 from django.db.models import Q
 import csv
 
+from rest_framework import settings
+
 from planning_db import PlanningDB
 
 try:
@@ -710,14 +712,14 @@ def api_export_historique(request):
 @csrf_exempt
 @require_GET
 def api_profile(request):
-    """API pour récupérer les données du profil - VERSION CORRIGÉE"""
+    """API pour récupérer les données du profil - VERSION CORRIGÉE AVEC PRIX"""
     chauffeur_id = request.session.get('chauffeur_id')
     
     if not chauffeur_id:
         return JsonResponse({'success': False, 'error': 'Non authentifié'}, status=401)
     
     try:
-        # Récupérer les modèles
+        from django.apps import apps
         Chauffeur = apps.get_model('gestion', 'Chauffeur')
         Course = apps.get_model('gestion', 'Course')
         
@@ -725,63 +727,79 @@ def api_profile(request):
         chauffeur = Chauffeur.objects.get(id=chauffeur_id)
         
         print(f"👤 Profil demandé pour: {chauffeur.nom} (ID: {chauffeur_id})")
+        print(f"💰 Prix par défaut du chauffeur: {chauffeur.prix_course_par_defaut}")
         
-        # ========== VÉRIFICATION DES CHAMPS ==========
-        print("🔍 Vérification des champs:")
-        
-        # Liste de tous les champs possibles
-        champs_possibles = [
-            'nom', 'telephone', 'numero_voiture', 'type_chauffeur',
-            'actif', 'adresse', 'email', 'societe', 'numero_identite',
-            'prix_course_par_defaut', 'statut', 'created_at', 'super_chauffeur'
-        ]
-        
-        profile_data = {}
-        
-        for champ in champs_possibles:
-            if hasattr(chauffeur, champ):
-                valeur = getattr(chauffeur, champ)
-                # Convertir les valeurs spéciales
-                if champ == 'created_at' and valeur:
-                    valeur = valeur.strftime('%d/%m/%Y')
-                profile_data[champ] = valeur
-                print(f"  ✅ {champ}: {valeur}")
-            else:
-                profile_data[champ] = ''
-                print(f"  ⚠️ {champ}: NON DISPONIBLE")
-        
-        # Alias pour compatibilité
-        profile_data['vehicule'] = profile_data.get('numero_voiture', '')
-        # ============================================
+        # ========== CONSTRUCTION DU PROFIL ==========
+        profile_data = {
+            'id': chauffeur.id,
+            'nom': chauffeur.nom,
+            'telephone': chauffeur.telephone,
+            'numero_voiture': chauffeur.numero_voiture or '',
+            'vehicule': chauffeur.numero_voiture or '',
+            'type_chauffeur': chauffeur.type_chauffeur,
+            'type_display': chauffeur.get_type_chauffeur_display(),
+            'actif': chauffeur.actif,
+            'adresse': chauffeur.adresse or '',
+            'email': chauffeur.email or '',
+            'societe': chauffeur.societe or '',
+            'numero_identite': chauffeur.numero_identite or '',
+            'prix_course_par_defaut': float(chauffeur.prix_course_par_defaut) if chauffeur.prix_course_par_defaut else 0.0,
+            'statut': chauffeur.statut,
+            'super_chauffeur': chauffeur.super_chauffeur,
+            'created_at': chauffeur.created_at.strftime('%d/%m/%Y') if chauffeur.created_at else '',
+        }
         
         # Statistiques
         total_courses = Course.objects.filter(chauffeur_id=chauffeur_id).count()
         courses_validees = Course.objects.filter(chauffeur_id=chauffeur_id, statut='validee').count()
+        courses_attente = Course.objects.filter(chauffeur_id=chauffeur_id, statut='en_attente').count()
+        courses_annulees = Course.objects.filter(chauffeur_id=chauffeur_id, statut='annulee').count()
         
-        # Calcul du revenu total
+        # Calcul du revenu total AVEC LE PRIX CORRECT
         courses = Course.objects.filter(chauffeur_id=chauffeur_id, statut='validee')
         revenu_total = 0
+        details_courses = []
+        
         for course in courses:
-            try:
-                if hasattr(course, 'prix_total') and course.prix_total:
-                    prix = float(course.prix_total)
-                elif hasattr(course, 'get_prix_course'):
-                    prix = float(course.get_prix_course() or 0)
-                else:
-                    prix = 0
-                revenu_total += prix
-            except (ValueError, TypeError):
-                continue
+            # Utiliser get_prix_course pour avoir le bon prix
+            prix = course.get_prix_course()
+            revenu_total += prix
+            
+            details_courses.append({
+                'id': course.id,
+                'date': course.date_reelle.strftime('%d/%m/%Y') if course.date_reelle else '',
+                'heure': course.heure,
+                'type': course.type_transport,
+                'prix': round(prix, 2)
+            })
+        
+        # Prix par défaut du chauffeur
+        prix_defaut = float(chauffeur.prix_course_par_defaut) if chauffeur.prix_course_par_defaut else 0.0
+        
+        # Si le prix par défaut est 0, définir une valeur par défaut
+        if prix_defaut == 0:
+            if chauffeur.type_chauffeur == 'taxi':
+                prix_defaut = float(getattr(settings, 'PRIX_COURSE_TAXI', 15.0))
+            elif chauffeur.type_chauffeur == 'prive':
+                prix_defaut = float(getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 10.0))
+            else:
+                prix_defaut = 10.0
+            
+            print(f"⚠️ Prix par défaut défini à {prix_defaut} (type: {chauffeur.type_chauffeur})")
         
         return JsonResponse({
             'success': True,
             'profile': profile_data,
+            'prix_par_defaut': prix_defaut,
             'stats': {
                 'total_courses': total_courses,
                 'courses_validees': courses_validees,
+                'courses_attente': courses_attente,
+                'courses_annulees': courses_annulees,
                 'revenu_total': round(revenu_total, 2),
                 'moyenne_mensuelle': round(revenu_total / 12, 2) if revenu_total > 0 else 0,
-            }
+            },
+            'dernieres_courses': details_courses[:5]  # 5 dernières courses
         })
         
     except Exception as e:
@@ -2395,17 +2413,7 @@ def api_creer_course(request):
         
         heure_int = int(heure)
         
-        # ========== 1. VÉRIFICATION AVEC LA FONCTION ==========
-# if not est_heure_valide_pour_creation(heure_int, heure_actuelle):
-#     return JsonResponse({
-#         'success': False,
-#         'error': f"Impossible de créer une course pour {heure_int}h (heure future). Les courses ne peuvent être créées que pour les heures déjà passées."
-#     }, status=400)
-
-# Remplace par un simple log
-        print(f"  ✅ Création autorisée pour {heure_int}h (heure actuelle: {heure_actuelle}h)")
-        
-        # ========== 2. GESTION DE LA DATE (cycle 6h-4h) ==========
+        # ========== GESTION DE LA DATE (cycle 6h-4h) ==========
         date_a_utiliser = date_obj
         
         if heure_actuelle >= 6:
@@ -2433,7 +2441,7 @@ def api_creer_course(request):
         
         print(f"📅 Date utilisée: {date_a_utiliser}")
         
-        # ========== 3. CONVERSION DU JOUR EN FRANÇAIS ==========
+        # ========== CONVERSION DU JOUR EN FRANÇAIS ==========
         jours_fr = {
             'Monday': 'Lundi', 'Tuesday': 'Mardi', 'Wednesday': 'Mercredi',
             'Thursday': 'Jeudi', 'Friday': 'Vendredi', 'Saturday': 'Samedi',
@@ -2445,7 +2453,7 @@ def api_creer_course(request):
         
         print(f"📅 Jour: {jour_francais}")
         
-        # ========== 4. CRÉATION DE LA COURSE ==========
+        # ========== CRÉATION DE LA COURSE ==========
         from django.apps import apps
         Course = apps.get_model('gestion', 'Course')
         Affectation = apps.get_model('gestion', 'Affectation')
@@ -2453,6 +2461,22 @@ def api_creer_course(request):
         Agent = apps.get_model('gestion', 'Agent')
         
         chauffeur = Chauffeur.objects.get(id=chauffeur_id)
+        
+        # ========== 🔥 CORRECTION : RÉCUPÉRER LE PRIX DU CHAUFFEUR ==========
+        # 1. Utiliser le prix du chauffeur
+        prix_course = float(chauffeur.prix_course_par_defaut) if chauffeur.prix_course_par_defaut else 0.0
+        
+        # 2. Si le prix est 0, utiliser le prix par défaut selon le type
+        if prix_course == 0:
+            if chauffeur.type_chauffeur == 'taxi':
+                prix_course = float(getattr(settings, 'PRIX_COURSE_TAXI', 15.0))
+            elif chauffeur.type_chauffeur == 'prive':
+                prix_course = float(getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 10.0))
+            else:
+                prix_course = 10.0
+        
+        print(f"💰 PRIX DE LA COURSE: {prix_course} DNT (type: {chauffeur.type_chauffeur})")
+        # ================================================================
         
         # Vérifier si la course existe déjà
         course_existante = Course.objects.filter(
@@ -2480,6 +2504,12 @@ def api_creer_course(request):
             
             course = course_existante
             created = False
+            
+            # Mettre à jour le prix si différent
+            if course.prix_total != prix_course:
+                course.prix_total = prix_course
+                course.save()
+                print(f"💰 Prix mis à jour: {prix_course} DNT")
         else:
             course = Course(
                 chauffeur=chauffeur,
@@ -2487,13 +2517,14 @@ def api_creer_course(request):
                 type_transport=type_transport,
                 heure=heure_int,
                 jour=jour_francais,
-                statut='en_attente'
+                statut='en_attente',
+                prix_total=prix_course  # 🔥 AJOUT : Définir le prix
             )
             course.save()
             created = True
-            print(f"✅ Nouvelle course créée ID: {course.id}")
+            print(f"✅ Nouvelle course créée ID: {course.id} avec prix {prix_course} DNT")
         
-        # ========== 5. AJOUT DES AFFECTATIONS ==========
+        # ========== AJOUT DES AFFECTATIONS ==========
         agents_affectes = []
         agents_hors_planning = []
         
@@ -2519,7 +2550,7 @@ def api_creer_course(request):
                         heure=heure_int,
                         jour=jour_francais,
                         date_reelle=date_a_utiliser,
-                        prix_course=course.get_prix_course() if hasattr(course, 'get_prix_course') else 0
+                        prix_course=prix_course
                     )
                     agents_affectes.append(agent)
                     print(f"  ✅ Agent {agent.nom} affecté")
@@ -2532,7 +2563,6 @@ def api_creer_course(request):
                     if not est_programme:
                         agents_hors_planning.append(agent)
                         print(f"  🚨 Agent HORS PLANNING: {agent.nom}")
-                        # CRÉER LA NOTIFICATION POUR L'ADMIN
                         notify_admin_hors_planning(course, agent, chauffeur, request)
                     # ==========================================
                     
@@ -2551,6 +2581,8 @@ def api_creer_course(request):
             'success': True,
             'message': f'Course créée avec {len(agents_affectes)} agent(s)',
             'course_id': course.id,
+            'prix_course': prix_course,
+            'prix_display': f"{prix_course:.2f} DNT",
             'agents_affectes': [a.nom for a in agents_affectes],
             'agents_hors_planning': [a.nom for a in agents_hors_planning],
             'created': created,

@@ -372,17 +372,24 @@ class Course(models.Model):
         return f"{self.chauffeur.nom} - {self.jour} {self.date_reelle} - {self.heure}h"
     
     def get_prix_course(self):
-        # Utiliser le prix défini dans le chauffeur, sinon les prix par défaut
-        if self.chauffeur.prix_course_par_defaut and   self.chauffeur.prix_course_par_defaut > 0:
-            return self.chauffeur.prix_course_par_defaut
-        else:
-            # Fallback aux prix par défaut selon le type
+        """Retourne le prix de la course"""
+        # 1. Vérifier si un prix personnalisé a été défini
+        if self.prix_total and self.prix_total > 0:
+            return float(self.prix_total)
+        
+        # 2. Utiliser le prix par défaut du chauffeur
+        if self.chauffeur and hasattr(self.chauffeur, 'prix_course_par_defaut'):
+            if self.chauffeur.prix_course_par_defaut and self.chauffeur.prix_course_par_defaut > 0:
+                return float(self.chauffeur.prix_course_par_defaut)
+        
+        # 3. Fallback par type de chauffeur
+        if self.chauffeur:
             if self.chauffeur.type_chauffeur == 'taxi':
                 return getattr(settings, 'PRIX_COURSE_TAXI', 15.0)
             elif self.chauffeur.type_chauffeur == 'prive':
                 return getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 10.0)
-            else:
-                return getattr(settings, 'PRIX_COURSE_SOCIETE', 0.0)    
+        
+        return 0.0   
     def get_societes_dans_course(self):
         societes = set()
         for affectation in self.affectation_set.all():
