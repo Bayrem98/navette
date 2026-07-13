@@ -2413,7 +2413,7 @@ def api_creer_course(request):
         
         heure_int = int(heure)
         
-        # ========== GESTION DE LA DATE (cycle 6h-4h) ==========
+        # ========== 1. GESTION DE LA DATE (cycle 6h-4h) ==========
         date_a_utiliser = date_obj
         
         if heure_actuelle >= 6:
@@ -2441,7 +2441,7 @@ def api_creer_course(request):
         
         print(f"📅 Date utilisée: {date_a_utiliser}")
         
-        # ========== CONVERSION DU JOUR EN FRANÇAIS ==========
+        # ========== 2. CONVERSION DU JOUR EN FRANÇAIS ==========
         jours_fr = {
             'Monday': 'Lundi', 'Tuesday': 'Mardi', 'Wednesday': 'Mercredi',
             'Thursday': 'Jeudi', 'Friday': 'Vendredi', 'Saturday': 'Samedi',
@@ -2453,7 +2453,7 @@ def api_creer_course(request):
         
         print(f"📅 Jour: {jour_francais}")
         
-        # ========== CRÉATION DE LA COURSE ==========
+        # ========== 3. CRÉATION DE LA COURSE ==========
         from django.apps import apps
         Course = apps.get_model('gestion', 'Course')
         Affectation = apps.get_model('gestion', 'Affectation')
@@ -2488,6 +2488,13 @@ def api_creer_course(request):
         
         if course_existante:
             print(f"⚠️ Course déjà existante ID: {course_existante.id}")
+            
+            # Mettre à jour le prix si différent
+            if float(course_existante.prix_total) != prix_course:
+                course_existante.prix_total = prix_course
+                course_existante.save()
+                print(f"💰 Prix mis à jour: {prix_course} DNT")
+            
             agents_deja_affectes = Affectation.objects.filter(
                 course=course_existante,
                 agent_id__in=agents_ids
@@ -2499,17 +2506,12 @@ def api_creer_course(request):
                 return JsonResponse({
                     'success': True,
                     'message': 'Course déjà existante',
-                    'course_id': course_existante.id
+                    'course_id': course_existante.id,
+                    'prix_course': prix_course
                 })
             
             course = course_existante
             created = False
-            
-            # Mettre à jour le prix si différent
-            if course.prix_total != prix_course:
-                course.prix_total = prix_course
-                course.save()
-                print(f"💰 Prix mis à jour: {prix_course} DNT")
         else:
             course = Course(
                 chauffeur=chauffeur,
@@ -2518,13 +2520,13 @@ def api_creer_course(request):
                 heure=heure_int,
                 jour=jour_francais,
                 statut='en_attente',
-                prix_total=prix_course  # 🔥 AJOUT : Définir le prix
+                prix_total=prix_course  # 🔥 Définir le prix
             )
             course.save()
             created = True
             print(f"✅ Nouvelle course créée ID: {course.id} avec prix {prix_course} DNT")
         
-        # ========== AJOUT DES AFFECTATIONS ==========
+        # ========== 4. AJOUT DES AFFECTATIONS ==========
         agents_affectes = []
         agents_hors_planning = []
         
@@ -2542,7 +2544,7 @@ def api_creer_course(request):
                 ).exists()
                 
                 if not existe_deja:
-                    Affectation.objects.create(
+                    affectation = Affectation(
                         course=course,
                         chauffeur=chauffeur,
                         agent=agent,
@@ -2552,10 +2554,11 @@ def api_creer_course(request):
                         date_reelle=date_a_utiliser,
                         prix_course=prix_course
                     )
+                    affectation.save()
                     agents_affectes.append(agent)
                     print(f"  ✅ Agent {agent.nom} affecté")
                     
-                    # ========== VÉRIFICATION PLANNING ==========
+                    # Vérification planning
                     est_programme = verifier_agent_dans_planning(
                         agent, date_a_utiliser, heure_int, type_transport, request
                     )
@@ -2564,7 +2567,6 @@ def api_creer_course(request):
                         agents_hors_planning.append(agent)
                         print(f"  🚨 Agent HORS PLANNING: {agent.nom}")
                         notify_admin_hors_planning(course, agent, chauffeur, request)
-                    # ==========================================
                     
             except Agent.DoesNotExist:
                 print(f"❌ Agent ID {agent_id} non trouvé")
@@ -2573,7 +2575,7 @@ def api_creer_course(request):
                 print(f"❌ Erreur pour agent {agent_id}: {e}")
                 continue
         
-        # Résumé des agents hors planning
+        # Résumé
         if agents_hors_planning:
             print(f"⚠️ {len(agents_hors_planning)} agent(s) hors planning détecté(s): {[a.nom for a in agents_hors_planning]}")
         
