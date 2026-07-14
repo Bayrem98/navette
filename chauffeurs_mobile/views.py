@@ -3595,7 +3595,6 @@ def api_super_reservations_demain(request):
     try:
         from datetime import date, timedelta, datetime
         from planning_db import PlanningDB
-        import json
         
         from django.apps import apps
         Chauffeur = apps.get_model('gestion', 'Chauffeur')
@@ -3622,34 +3621,19 @@ def api_super_reservations_demain(request):
         print(f"=== SUPER DASHBOARD - Agents pour {demain_date} ({jour_semaine}) ===")
         
         # ========== 🔥 CHARGER LE PLANNING DEPUIS LA BASE DE DONNÉES ==========
-        # Récupérer le planning actif depuis la base
-        planning_actif = PlanningDB.get_active_planning()
+        planning_data = PlanningDB.get_planning_for_date(demain_str)
         
-        if planning_actif is None:
-            print("⚠️ Aucun planning actif trouvé en base de données")
+        if planning_data is None or len(planning_data) == 0:
+            print(f"⚠️ Aucun planning trouvé en base de données pour {demain_str}")
             return JsonResponse({
                 'success': True,
                 'reservations': [],
-                'message': 'Aucun planning trouvé. Veuillez uploader un planning.',
-                'planning_charge': False,
-                'date': demain_str
-            })
-        
-        # Charger les données du planning
-        planning_data = json.loads(planning_actif.donnees) if planning_actif.donnees else []
-        
-        if not planning_data:
-            print("⚠️ Planning vide")
-            return JsonResponse({
-                'success': True,
-                'reservations': [],
-                'message': 'Planning vide',
+                'message': 'Aucun planning trouvé',
                 'planning_charge': False,
                 'date': demain_str
             })
         
         print(f"✅ Planning chargé depuis base: {len(planning_data)} lignes")
-        print(f"📊 Colonnes: {list(planning_data[0].keys()) if planning_data else []}")
         # ====================================================================
         
         # 1. Récupérer TOUTES les réservations pour demain
@@ -3682,58 +3666,56 @@ def api_super_reservations_demain(request):
         heures_data = []
         
         # Fonction pour traiter une heure spécifique
-        def traiter_heure_avec_planning_data(heure_valeur, type_transport):
-            """Traite une heure spécifique avec les données du planning"""
+        def traiter_heure_avec_planning_data(heure_valeur, type_transport, planning_data):
+            """Traite une heure spécifique avec les données du planning déjà chargées"""
             agents_heure = []
             
+            # Filtrer les données du planning pour cette heure
             for item in planning_data:
-                # Récupérer le nom de l'agent - le champ s'appelle 'Salarie'
-                agent_nom = item.get('Salarie', '') or item.get('salarie', '')
-                if not agent_nom:
-                    continue
-                
-                # Récupérer l'horaire pour le jour correspondant
-                # Le champ correspond au jour de la semaine (ex: 'Mercredi', 'Jeudi', etc.)
-                horaire = item.get(jour_semaine, '') or ''
-                
                 # Vérifier si l'agent est programmé à cette heure
+                horaire = item.get('horaire', '') or ''
+                
+                # Chercher l'heure dans le texte (ex: "7h-16h" ou "7h")
                 heure_str = str(heure_valeur)
-                if heure_str not in horaire and f"{heure_valeur}h" not in horaire:
-                    continue
-                
-                # Chercher l'agent dans la base
-                agent_obj = Agent.objects.filter(nom__icontains=agent_nom).first()
-                
-                if agent_obj:
-                    # Vérifier si l'agent est déjà réservé à cette heure
-                    reservation_existante = reservations.filter(
-                        agent=agent_obj,
-                        heure_transport__heure=heure_valeur,
-                        type_transport=type_transport
-                    ).first()
+                if heure_str in horaire or f"{heure_valeur}h" in horaire:
+                    agent_nom = item.get('salarie', '')
+                    qualification = item.get('qualification', '')
                     
-                    est_reserve = reservation_existante is not None
-                    est_mien = est_reserve and reservation_existante.chauffeur_id == int(chauffeur_id)
+                    if not agent_nom:
+                        continue
                     
-                    agent_data = {
-                        'id': agent_obj.id,
-                        'nom': agent_obj.nom,
-                        'telephone': agent_obj.telephone or 'Non spécifié',
-                        'societe': agent_obj.get_societe_display(),
-                        'adresse': agent_obj.adresse or 'Non spécifiée',
-                        'est_complet': agent_obj.est_complet() if hasattr(agent_obj, 'est_complet') else True,
-                        'est_reserve': est_reserve,
-                        'est_mien': est_mien,
-                        'peut_reserver': not est_reserve,
-                        'horaire_planning': horaire
-                    }
+                    # Chercher l'agent dans la base
+                    agent_obj = Agent.objects.filter(nom__icontains=agent_nom).first()
                     
-                    if est_reserve:
-                        agent_data['chauffeur_reservant'] = reservation_existante.chauffeur.nom
-                        agent_data['chauffeur_reservant_id'] = reservation_existante.chauffeur.id
-                        agent_data['reservation_id'] = reservation_existante.id
-                    
-                    agents_heure.append(agent_data)
+                    if agent_obj:
+                        # Vérifier si l'agent est déjà réservé à cette heure
+                        reservation_existante = reservations.filter(
+                            agent=agent_obj,
+                            heure_transport__heure=heure_valeur,
+                            type_transport=type_transport
+                        ).first()
+                        
+                        est_reserve = reservation_existante is not None
+                        est_mien = est_reserve and reservation_existante.chauffeur_id == int(chauffeur_id)
+                        
+                        agent_data = {
+                            'id': agent_obj.id,
+                            'nom': agent_obj.nom,
+                            'telephone': agent_obj.telephone or 'Non spécifié',
+                            'societe': agent_obj.get_societe_display(),
+                            'adresse': agent_obj.adresse or 'Non spécifiée',
+                            'est_complet': agent_obj.est_complet() if hasattr(agent_obj, 'est_complet') else True,
+                            'est_reserve': est_reserve,
+                            'est_mien': est_mien,
+                            'peut_reserver': not est_reserve,
+                        }
+                        
+                        if est_reserve:
+                            agent_data['chauffeur_reservant'] = reservation_existante.chauffeur.nom
+                            agent_data['chauffeur_reservant_id'] = reservation_existante.chauffeur.id
+                            agent_data['reservation_id'] = reservation_existante.id
+                        
+                        agents_heure.append(agent_data)
             
             return agents_heure
         
@@ -3742,12 +3724,9 @@ def api_super_reservations_demain(request):
             heure_valeur = heure.heure
             print(f"📊 Traitement heure: {heure_valeur}h ({heure.libelle})")
             
-            agents_heure = traiter_heure_avec_planning_data(heure_valeur, 'ramassage')
+            agents_heure = traiter_heure_avec_planning_data(heure_valeur, 'ramassage', planning_data)
             
             print(f"  📋 {len(agents_heure)} agent(s) trouvé(s) pour {heure_valeur}h")
-            
-            if agents_heure:
-                print(f"     Exemples: {[a['nom'] for a in agents_heure[:3]]}")
             
             heures_data.append({
                 'heure_id': heure.id,
@@ -3766,12 +3745,9 @@ def api_super_reservations_demain(request):
             heure_valeur = heure.heure
             print(f"📊 Traitement heure: {heure_valeur}h ({heure.libelle})")
             
-            agents_heure = traiter_heure_avec_planning_data(heure_valeur, 'depart')
+            agents_heure = traiter_heure_avec_planning_data(heure_valeur, 'depart', planning_data)
             
             print(f"  📋 {len(agents_heure)} agent(s) trouvé(s) pour {heure_valeur}h")
-            
-            if agents_heure:
-                print(f"     Exemples: {[a['nom'] for a in agents_heure[:3]]}")
             
             heures_data.append({
                 'heure_id': heure.id,
