@@ -3586,7 +3586,7 @@ def api_super_historique_global(request):
 @csrf_exempt
 @require_GET
 def api_super_reservations_demain(request):
-    """API pour voir et réserver les agents pour demain - VERSION AVEC PLANNINGDB UNIQUEMENT"""
+    """API pour voir et réserver les agents pour demain - VERSION AVEC CHARGEMENT DEPUIS LA BASE"""
     chauffeur_id = request.session.get('chauffeur_id')
     
     if not chauffeur_id:
@@ -3649,6 +3649,7 @@ def api_super_reservations_demain(request):
             })
         
         print(f"✅ Planning chargé depuis base: {len(planning_data)} lignes")
+        print(f"📊 Colonnes: {list(planning_data[0].keys()) if planning_data else []}")
         # ====================================================================
         
         # 1. Récupérer TOUTES les réservations pour demain
@@ -3686,12 +3687,13 @@ def api_super_reservations_demain(request):
             agents_heure = []
             
             for item in planning_data:
-                # Récupérer le nom de l'agent
+                # Récupérer le nom de l'agent - le champ s'appelle 'Salarie'
                 agent_nom = item.get('Salarie', '') or item.get('salarie', '')
                 if not agent_nom:
                     continue
                 
-                # Récupérer le jour correspondant (Mercredi, Jeudi, etc.)
+                # Récupérer l'horaire pour le jour correspondant
+                # Le champ correspond au jour de la semaine (ex: 'Mercredi', 'Jeudi', etc.)
                 horaire = item.get(jour_semaine, '') or ''
                 
                 # Vérifier si l'agent est programmé à cette heure
@@ -3744,6 +3746,9 @@ def api_super_reservations_demain(request):
             
             print(f"  📋 {len(agents_heure)} agent(s) trouvé(s) pour {heure_valeur}h")
             
+            if agents_heure:
+                print(f"     Exemples: {[a['nom'] for a in agents_heure[:3]]}")
+            
             heures_data.append({
                 'heure_id': heure.id,
                 'heure_libelle': heure.libelle,
@@ -3764,6 +3769,9 @@ def api_super_reservations_demain(request):
             agents_heure = traiter_heure_avec_planning_data(heure_valeur, 'depart')
             
             print(f"  📋 {len(agents_heure)} agent(s) trouvé(s) pour {heure_valeur}h")
+            
+            if agents_heure:
+                print(f"     Exemples: {[a['nom'] for a in agents_heure[:3]]}")
             
             heures_data.append({
                 'heure_id': heure.id,
