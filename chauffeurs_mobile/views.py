@@ -12,6 +12,7 @@ from django.db.models import Q
 import csv
 
 from planning_db import PlanningDB
+from transport_app import settings
 
 try:
     # Essayer d'importer depuis votre structure d'app
@@ -2395,17 +2396,7 @@ def api_creer_course(request):
         
         heure_int = int(heure)
         
-        # ========== 1. VÉRIFICATION AVEC LA FONCTION ==========
-# if not est_heure_valide_pour_creation(heure_int, heure_actuelle):
-#     return JsonResponse({
-#         'success': False,
-#         'error': f"Impossible de créer une course pour {heure_int}h (heure future). Les courses ne peuvent être créées que pour les heures déjà passées."
-#     }, status=400)
-
-# Remplace par un simple log
-        print(f"  ✅ Création autorisée pour {heure_int}h (heure actuelle: {heure_actuelle}h)")
-        
-        # ========== 2. GESTION DE LA DATE (cycle 6h-4h) ==========
+        # ========== GESTION DE LA DATE (cycle 6h-4h) ==========
         date_a_utiliser = date_obj
         
         if heure_actuelle >= 6:
@@ -2433,7 +2424,7 @@ def api_creer_course(request):
         
         print(f"📅 Date utilisée: {date_a_utiliser}")
         
-        # ========== 3. CONVERSION DU JOUR EN FRANÇAIS ==========
+        # ========== CONVERSION DU JOUR EN FRANÇAIS ==========
         jours_fr = {
             'Monday': 'Lundi', 'Tuesday': 'Mardi', 'Wednesday': 'Mercredi',
             'Thursday': 'Jeudi', 'Friday': 'Vendredi', 'Saturday': 'Samedi',
@@ -2445,7 +2436,7 @@ def api_creer_course(request):
         
         print(f"📅 Jour: {jour_francais}")
         
-        # ========== 4. CRÉATION DE LA COURSE ==========
+        # ========== CRÉATION DE LA COURSE ==========
         from django.apps import apps
         Course = apps.get_model('gestion', 'Course')
         Affectation = apps.get_model('gestion', 'Affectation')
@@ -2453,6 +2444,22 @@ def api_creer_course(request):
         Agent = apps.get_model('gestion', 'Agent')
         
         chauffeur = Chauffeur.objects.get(id=chauffeur_id)
+        
+        # ========== 🔥 CORRECTION : RÉCUPÉRER LE PRIX DU CHAUFFEUR ==========
+        # 1. Utiliser le prix du chauffeur
+        prix_course = float(chauffeur.prix_course_par_defaut) if chauffeur.prix_course_par_defaut else 0.0
+        
+        # 2. Si le prix est 0, utiliser le prix par défaut selon le type
+        if prix_course == 0:
+            if chauffeur.type_chauffeur == 'taxi':
+                prix_course = float(getattr(settings, 'PRIX_COURSE_TAXI', 15.0))
+            elif chauffeur.type_chauffeur == 'prive':
+                prix_course = float(getattr(settings, 'PRIX_COURSE_CHAUFFEUR', 10.0))
+            else:
+                prix_course = 10.0
+        
+        print(f"💰 PRIX DE LA COURSE: {prix_course} DNT (type: {chauffeur.type_chauffeur})")
+        # ================================================================
         
         # Vérifier si la course existe déjà
         course_existante = Course.objects.filter(
@@ -2480,6 +2487,12 @@ def api_creer_course(request):
             
             course = course_existante
             created = False
+            
+            # Mettre à jour le prix si différent
+            if course.prix_total != prix_course:
+                course.prix_total = prix_course
+                course.save()
+                print(f"💰 Prix mis à jour: {prix_course} DNT")
         else:
             course = Course(
                 chauffeur=chauffeur,
@@ -2487,13 +2500,14 @@ def api_creer_course(request):
                 type_transport=type_transport,
                 heure=heure_int,
                 jour=jour_francais,
-                statut='en_attente'
+                statut='en_attente',
+                prix_total=prix_course  # 🔥 AJOUT : Définir le prix
             )
             course.save()
             created = True
-            print(f"✅ Nouvelle course créée ID: {course.id}")
+            print(f"✅ Nouvelle course créée ID: {course.id} avec prix {prix_course} DNT")
         
-        # ========== 5. AJOUT DES AFFECTATIONS ==========
+        # ========== AJOUT DES AFFECTATIONS ==========
         agents_affectes = []
         agents_hors_planning = []
         
@@ -2519,7 +2533,7 @@ def api_creer_course(request):
                         heure=heure_int,
                         jour=jour_francais,
                         date_reelle=date_a_utiliser,
-                        prix_course=course.get_prix_course() if hasattr(course, 'get_prix_course') else 0
+                        prix_course=prix_course
                     )
                     agents_affectes.append(agent)
                     print(f"  ✅ Agent {agent.nom} affecté")
@@ -2532,7 +2546,6 @@ def api_creer_course(request):
                     if not est_programme:
                         agents_hors_planning.append(agent)
                         print(f"  🚨 Agent HORS PLANNING: {agent.nom}")
-                        # CRÉER LA NOTIFICATION POUR L'ADMIN
                         notify_admin_hors_planning(course, agent, chauffeur, request)
                     # ==========================================
                     
@@ -2551,6 +2564,8 @@ def api_creer_course(request):
             'success': True,
             'message': f'Course créée avec {len(agents_affectes)} agent(s)',
             'course_id': course.id,
+            'prix_course': prix_course,
+            'prix_display': f"{prix_course:.2f} DNT",
             'agents_affectes': [a.nom for a in agents_affectes],
             'agents_hors_planning': [a.nom for a in agents_hors_planning],
             'created': created,
